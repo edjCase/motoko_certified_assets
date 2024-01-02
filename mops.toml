@@ -1,7 +1,23 @@
+[package]
+name = "certified-assets"
+description = "A library designed to certify assets served via HTTP on the Internet Computer."
+version = "0.0.1"
+license = "MIT"
+keywords = ["assets", "http", "certification"]
+
 [dependencies]
-base = "0.10.2"
+base = "0.10.3"
+ic-certification = "0.1.3"
+sha2 = "0.0.4"
+http-parser = "https://github.com/NatLabs/http-parser.mo#master@27cba8ed0d39387e0fb660f65909ffe2a7d54413"
+http-types = "1.0.0"
+encoding = "https://github.com/aviate-labs/encoding.mo#v0.4.1@2711d18727e954b11afc0d37945608512b5fbce2"
+serde = "2.1.1"
+map = "9.0.1"
+rep-indy-hash = "0.1.1"
+itertools = "0.1.2"
 
 [dev-dependencies]
-test = "1.0.1"
+test = "1.2.0"
 bench = "1.0.0"
-fuzz = "0.1.0"
+fuzz = "0.2.0"
