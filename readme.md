@@ -1,5 +1,7 @@
 # Certified Assets
-A library designed to certify assets served via HTTP on the Internet Computer. It implements the [Response Verification Standard](https://github.com/dfinity/interface-spec/blob/master/spec/http-gateway-protocol-spec.md#response-verification) and works by certifying data and their endpoints during update calls. Once certified, the certificates are returned as headers in an HTTP response, ensuring the security and integrity of the data.
+A library designed to certify assets served via HTTP on the Internet Computer. 
+It implements the [Response Verification Standard](https://github.com/dfinity/interface-spec/blob/master/spec/http-gateway-protocol-spec.md#response-verification) and works by certifying data and their endpoints during update calls. 
+Once certified, the certificates are returned as headers in an HTTP response, ensuring the security and integrity of the data.
 
 ## Getting Started
 
