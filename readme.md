@@ -27,7 +27,7 @@ import CertifiedAssets "mo:certified-assets";
 
 - `Stable Heap` - For creating a persistent instance that remains stable through canister upgrades
     ```motoko
-        let stable_certs = CertifiedAssets.init_stable_store();
+        stable let stable_certs = CertifiedAssets.init_stable_store();
         let certs = CertifiedAssets.CertifiedAssets(?stable_certs);
     ```
 
