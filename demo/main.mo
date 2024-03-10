@@ -110,38 +110,90 @@ actor {
     };
 
     func certify_homepage() {
-        let _homepage = homepage();
-        let homepage_endpoint = CertifiedAssets.Endpoint("/home", Text.encodeUtf8(_homepage))
+        let homepage_endpoint = CertifiedAssets.Endpoint("/home", ?Text.encodeUtf8(homepage()))
             .no_certification()
             .response_header("Content-Type", "text/html")
             .status(200);
-        ignore certs.certify(homepage_endpoint);
+        certs.certify(homepage_endpoint);
 
-        let teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", Text.encodeUtf8(teams_json(null)))
-            .no_request_certification()
+        let teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(null)))
             .response_header("Content-Type", "application/json")
             .status(200);
-        ignore certs.certify(teams_endpoint);
+        certs.certify(teams_endpoint);
 
-        let small_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", Text.encodeUtf8(teams_json(? #small)))
-            .query_param("size", "small")
+        let small_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #small)))
+            // .query_param("size", "small")
             .response_header("Content-Type", "application/json")
+            .request_header("connection", "keep-alive")
             .status(200);
-        ignore certs.certify(small_teams_endpoint);
+        certs.certify(small_teams_endpoint);
 
-        let medium_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", Text.encodeUtf8(teams_json(? #medium)))
+        let medium_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #medium)))
             .query_param("size", "medium")
             .response_header("Content-Type", "application/json")
             .status(200);
-        ignore certs.certify(medium_teams_endpoint);
+        certs.certify(medium_teams_endpoint);
+
+        let large_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #large)))
+            .query_param("size", "large")
+            .response_header("Content-Type", "application/json")
+            .status(200);
+        certs.certify(large_teams_endpoint);
+
 
         for ((team, _) in Map.entries(teams)) {
-            let team_endpoint = CertifiedAssets.Endpoint("/v1/teams/" # team, Text.encodeUtf8(single_team_json(team)))
+            let team_endpoint = CertifiedAssets.Endpoint("/v1/teams/" # team, ?Text.encodeUtf8(single_team_json(team)))
                 .response_header("Content-Type", "application/json")
-                .status(200);
-            ignore certs.certify(team_endpoint);
+                .status(200)
+                .no_request_certification()
+                .request_header("Ignores", "This");
+            certs.certify(team_endpoint);
         };
 
+       
+        certify_endpoints_page();
+
+    };
+
+    func endpoints_json() : Text {
+        type End = {
+            url : Text;
+            method : Text;
+            query_params : [(Text, Text)];
+            request_headers : [HttpTypes.Header];
+            status : Nat16;
+            response_headers : [HttpTypes.Header];
+            no_certification : Bool;
+            no_request_certification : Bool;
+        };
+
+        let endpoints_arr  = Array.map(
+            Iter.toArray(
+                Iter.filter(
+                    certs.endpoints(),
+                    func(endpoint: CertifiedAssets.EndpointRecord): Bool = endpoint.url != "/endpoints",
+                )
+            ),
+            func(end: CertifiedAssets.EndpointRecord): End = { end with hash : Text = ""; },
+        );
+
+        let candid = to_candid(endpoints_arr : [End]);
+        
+        let keys = ["url", "method", "query_params", "request_headers", "status", "response_headers", "no_certification", "no_request_certification"];
+        switch (JSON.toText(candid, keys, null)){
+            case (#ok(text)) text;
+            case (#err(err)) Debug.trap("Error in converting endpoints to json: " # err);
+        };
+
+    };
+
+    func certify_endpoints_page(){
+        let endpoints = CertifiedAssets.Endpoint("/endpoints", ?Text.encodeUtf8(endpoints_json()))
+            .no_certification()
+            .response_header("Content-Type", "application/json")
+            .status(200);
+
+        ignore certs.certify(endpoints);
     };
 
     public func create_user(username : Text, team : Text) {
@@ -174,11 +226,30 @@ actor {
         certify_homepage();
     };
 
+    public func recertify(): async (){
+        certify_homepage();
+    };
+
+    public func clear_certificates(): async (){
+        certs.clear();
+        certify_endpoints_page();
+    };
+
     public query func http_request(req : HttpTypes.Request) : async HttpTypes.Response {
         let url = HttpParser.URL(req.url, HttpParser.Headers([]));
         assert req.body == "";
-        Debug.print("req: " # debug_show req);
+        assert req.method == "GET";
+
         let response : HttpTypes.Response = switch (url.path.original, url.queryObj.get("size")) {
+            case ("/endpoints", _){
+                {
+                    status_code = 200;
+                    body = Text.encodeUtf8(endpoints_json());
+                    headers = [("Content-Type", "application/json")];
+                    streaming_strategy = null;
+                    upgrade = null;
+                };
+            };
             case ("/home", _) {
                 {
                     status_code = 200;
@@ -195,10 +266,8 @@ actor {
                     case ("small") #small;
                     case ("medium") #medium;
                     case ("large") #large;
-                    case (_) #small;
+                    case (_) Debug.trap("Invalid size: " # text_size);
                 };
-
-                Debug.print("size: " # debug_show size);
 
                 {
                     status_code = 200;
@@ -246,7 +315,7 @@ actor {
         let #ok(certified_response) = result else {
 
             let #err(errorMsg) = result else Prelude.unreachable();
-            Debug.print("prev response: " # debug_show { response with streaming_strategy = null });
+
             return {
                 status_code = 404;
                 body = Text.encodeUtf8("Certified Assets Error: " # errorMsg);
