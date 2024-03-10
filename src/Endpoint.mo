@@ -28,62 +28,96 @@ module {
 
     public type EndpointRecord = {
         url : Text;
-        body : Blob;
+        hash : Blob;
         method : Text;
-        queries : [(Text, Text)];
+        query_params : [(Text, Text)];
         request_headers : [HttpTypes.Header];
         status : Nat16;
         response_headers : [HttpTypes.Header];
         no_certification : Bool;
         no_request_certification : Bool;
+        is_fallback_path: Bool;
     };
     
     /// A class that contains all the information needed to certify a given endpoint.
     /// Recieves a URL endpoint and the data to be certified.
     /// Only the path of the URL is used for certification.
     /// If you need to certify the query parameters, use either the [`query_param()`](#query_param)
-    /// function or the [`queries()`](#queries) function.
+    /// function or the [`query_params()`](#query_params) function.
 
-    public class Endpoint(url : Text, body : Blob) = self {
-
+    public class Endpoint(url_text : Text, opt_body : ?Blob) = self {
+        
         // flags
         var _no_certification = false;
         var _no_request_certification = false;
 
         // request
         var _method : Text = "GET";
-        var _queries = Buffer.Buffer<(Text, Text)>(8);
         var _request_headers = Buffer.Buffer<HttpTypes.Header>(8);
 
         // response
         var _status : Nat16 = 200;
         var _response_headers = Buffer.Buffer<HttpTypes.Header>(8);
+    
+        var _hash : Blob = switch(opt_body){
+            case (?_body) SHA256.fromBlob(#sha256, _body);
+            case (null) SHA256.fromBlob(#sha256, "");
+        };
+
+        var _is_fallback_path = false;
+
+        let sha256 = SHA256.Digest(#sha256);
+        let _url = HttpParser.URL(url_text, HttpParser.Headers([]));
+        let _queries = Buffer.Buffer<HttpTypes.Header>(8);
+
+        public func body(blob: Blob): Endpoint {
+            sha256.writeBlob(blob);
+            _hash := sha256.sum();
+            sha256.reset();
+            return self;
+        };
+
+        public func hash(hash: Blob): Endpoint {
+            _hash := hash;
+            return self;
+        };
+
+        public func chunks(chunks: [Blob]): Endpoint {
+            for (chunk in chunks.vals()) {
+                sha256.writeBlob(chunk);
+            };
+
+            _hash := sha256.sum();
+            sha256.reset();
+
+            return self;
+        };
 
         public func method(method : Text) : Endpoint {
             _method := method;
             return self;
         };
 
-        public func request_header(name : Text, body : Text) : Endpoint {
-            _request_headers.add((name, body));
+        public func request_header(field : Text, value : Text) : Endpoint {
+            _request_headers.add((field, value));
             return self;
         };
 
         public func request_headers(params : [(Text, Text)]) : Endpoint {
-            for ((name, body) in params.vals()) {
-                _request_headers.add((name, body));
+            for ((field, value) in params.vals()) {
+                _request_headers.add((field, value));
             };
             return self;
         };
 
-        public func query_param(name : Text, body : Text) : Endpoint {
-            _queries.add((name, body));
+        public func query_param(field : Text, value : Text) : Endpoint {
+            _queries.add((field, value));
             return self;
         };
 
-        public func queries(params : [(Text, Text)]) : Endpoint {
-            for ((name, body) in params.vals()) {
-                _queries.add((name, body));
+        public func query_params(params : [(Text, Text)]) : Endpoint {
+            for ((field, value) in params.vals()) {
+                _queries.add((field, value));
             };
             return self;
         };
@@ -93,16 +127,21 @@ module {
             return self;
         };
 
-        public func response_header(name : Text, body : Text) : Endpoint {
-            _response_headers.add((name, body));
+        public func response_header(field : Text, value : Text) : Endpoint {
+            _response_headers.add((field, value));
             return self;
         };
 
         public func response_headers(params : [(Text, Text)]) : Endpoint {
-            for ((name, body) in params.vals()) {
-                _response_headers.add((name, body));
+            for ((field, value) in params.vals()) {
+                _response_headers.add((field, value));
             };
 
+            return self;
+        };
+
+        public func is_fallback_path() : Endpoint {
+            _is_fallback_path := true;
             return self;
         };
 
@@ -118,15 +157,16 @@ module {
 
         public func build() : EndpointRecord {
             let record : EndpointRecord = {
-                url;
-                body;
+                url = _url.path.original;
+                hash = _hash;
                 method = _method;
-                queries = Buffer.toArray(_queries);
+                query_params = Buffer.toArray(_queries);
                 request_headers = Buffer.toArray(_request_headers);
                 status = _status;
                 response_headers = Buffer.toArray(_response_headers);
                 no_certification = _no_certification;
                 no_request_certification = _no_request_certification;
+                is_fallback_path = _is_fallback_path;
             };
         };
     };
