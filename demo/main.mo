@@ -103,54 +103,34 @@ actor {
     func single_team_json(team : Text) : Text {
         let team_members = switch (Map.get(teams, thash, team)) {
             case (?v) Vector.toArray(v);
-            case (_)[];
+            case (_) [];
         };
 
         "{ \"members\": " # debug_show team_members # " }";
     };
 
     func certify_homepage() {
-        let homepage_endpoint = CertifiedAssets.Endpoint("/home", ?Text.encodeUtf8(homepage()))
-            .no_certification()
-            .response_header("Content-Type", "text/html")
-            .status(200);
+        let _homepage = homepage();
+        let homepage_endpoint = CertifiedAssets.Endpoint("/home", ?Text.encodeUtf8(_homepage)).no_request_certification().response_header("Content-Type", "text/html").response_header("Content-Length", debug_show _homepage.size()).status(200);
         certs.certify(homepage_endpoint);
 
-        let teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(null)))
-            .response_header("Content-Type", "application/json")
-            .status(200);
+        let teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(null))).response_header("Content-Type", "application/json").status(200);
         certs.certify(teams_endpoint);
 
-        let small_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #small)))
-            // .query_param("size", "small")
-            .response_header("Content-Type", "application/json")
-            .request_header("connection", "keep-alive")
-            .status(200);
+        let small_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #small))).query_param("size", "small").response_header("Content-Type", "application/json").request_header("connection", "keep-alive").status(200);
         certs.certify(small_teams_endpoint);
 
-        let medium_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #medium)))
-            .query_param("size", "medium")
-            .response_header("Content-Type", "application/json")
-            .status(200);
+        let medium_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #medium))).query_param("size", "medium").response_header("Content-Type", "application/json").status(200);
         certs.certify(medium_teams_endpoint);
 
-        let large_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #large)))
-            .query_param("size", "large")
-            .response_header("Content-Type", "application/json")
-            .status(200);
+        let large_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #large))).query_param("size", "large").response_header("Content-Type", "application/json").status(200);
         certs.certify(large_teams_endpoint);
 
-
         for ((team, _) in Map.entries(teams)) {
-            let team_endpoint = CertifiedAssets.Endpoint("/v1/teams/" # team, ?Text.encodeUtf8(single_team_json(team)))
-                .response_header("Content-Type", "application/json")
-                .status(200)
-                .no_request_certification()
-                .request_header("Ignores", "This");
+            let team_endpoint = CertifiedAssets.Endpoint("/v1/teams/" # team, ?Text.encodeUtf8(single_team_json(team))).response_header("Content-Type", "application/json").status(200).no_request_certification().request_header("Ignores", "This");
             certs.certify(team_endpoint);
         };
 
-       
         certify_endpoints_page();
 
     };
@@ -167,33 +147,32 @@ actor {
             no_request_certification : Bool;
         };
 
-        let endpoints_arr  = Array.map(
+        let endpoints_arr = Array.map(
             Iter.toArray(
                 Iter.filter(
                     certs.endpoints(),
-                    func(endpoint: CertifiedAssets.EndpointRecord): Bool = endpoint.url != "/endpoints",
+                    func(endpoint : CertifiedAssets.EndpointRecord) : Bool = endpoint.url != "/endpoints",
                 )
             ),
-            func(end: CertifiedAssets.EndpointRecord): End = { end with hash : Text = ""; },
+            func(end : CertifiedAssets.EndpointRecord) : End = {
+                end with hash : Text = "";
+            },
         );
 
-        let candid = to_candid(endpoints_arr : [End]);
-        
+        let candid = to_candid (endpoints_arr : [End]);
+
         let keys = ["url", "method", "query_params", "request_headers", "status", "response_headers", "no_certification", "no_request_certification"];
-        switch (JSON.toText(candid, keys, null)){
+        switch (JSON.toText(candid, keys, null)) {
             case (#ok(text)) text;
             case (#err(err)) Debug.trap("Error in converting endpoints to json: " # err);
         };
 
     };
 
-    func certify_endpoints_page(){
-        let endpoints = CertifiedAssets.Endpoint("/endpoints", ?Text.encodeUtf8(endpoints_json()))
-            .no_certification()
-            .response_header("Content-Type", "application/json")
-            .status(200);
+    func certify_endpoints_page() {
+        let endpoints = CertifiedAssets.Endpoint("/endpoints", ?Text.encodeUtf8(endpoints_json())).no_certification().response_header("Content-Type", "application/json").status(200);
 
-        ignore certs.certify(endpoints);
+        certs.certify(endpoints);
     };
 
     public func create_user(username : Text, team : Text) {
@@ -226,11 +205,11 @@ actor {
         certify_homepage();
     };
 
-    public func recertify(): async (){
+    public func recertify() : async () {
         certify_homepage();
     };
 
-    public func clear_certificates(): async (){
+    public func clear_certificates() : async () {
         certs.clear();
         certify_endpoints_page();
     };
@@ -241,7 +220,7 @@ actor {
         assert req.method == "GET";
 
         let response : HttpTypes.Response = switch (url.path.original, url.queryObj.get("size")) {
-            case ("/endpoints", _){
+            case ("/endpoints", _) {
                 {
                     status_code = 200;
                     body = Text.encodeUtf8(endpoints_json());
@@ -251,10 +230,13 @@ actor {
                 };
             };
             case ("/home", _) {
+
+                let _homepage = homepage();
+
                 {
                     status_code = 200;
-                    body = Text.encodeUtf8(homepage());
-                    headers = [("Content-Type", "text/html")];
+                    body = Text.encodeUtf8(_homepage);
+                    headers = [("Content-Type", "text/html"), ("Content-Length", debug_show _homepage.size())];
                     streaming_strategy = null;
                     upgrade = null;
                 };
@@ -310,7 +292,7 @@ actor {
             };
         };
 
-        let result = certs.get_certified_response(req, response);
+        let result = certs.get_certified_response(req, response, null);
 
         let #ok(certified_response) = result else {
 

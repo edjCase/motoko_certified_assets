@@ -34,7 +34,6 @@ module Module {
     type Result<T, E> = Result.Result<T, E>;
     type Vector<A> = Vector.Vector<A>;
 
-
     let { thash; bhash } = Map;
 
     type Metadata = {
@@ -54,14 +53,13 @@ module Module {
     public let Endpoint = EndpointModule.Endpoint;
     public type Endpoint = EndpointModule.Endpoint;
     public type EndpointRecord = EndpointModule.EndpointRecord;
-    
 
     /// Create a new stable CertifiedAssets instance on the heap.
     /// This instance is stable and will not be cleared on canister upgrade.
     ///
     /// ```motoko
     /// let cert_store = CertifiedAssets.init_stable_store();
-    /// let certs = CertifiedAssets.CertifiedAssets(cert_store);
+    /// let certs = CertifiedAssets.CertifiedAssets(?cert_store);
     /// ```
 
     public func init_stable_store() : StableStore {
@@ -113,8 +111,8 @@ module Module {
 
         /// Modifies a given response by adding the certificate headers.
         /// This only works if the endpoint has already been certified.
-        public func get_certified_response(req : HttpTypes.Request, res : HttpTypes.Response) : Result<HttpTypes.Response, Text> {
-            Module.get_certified_response(internal, req, res);
+        public func get_certified_response(req : HttpTypes.Request, res : HttpTypes.Response, response_hash: ?Blob) : Result<HttpTypes.Response, Text> {
+            Module.get_certified_response(internal, req, res, response_hash);
         };
 
         /// Get the certificate for a given request.
@@ -126,19 +124,22 @@ module Module {
         /// public func http_request(req : HttpTypes.Request) : HttpTypes.Response {
         ///     let res : HttpTypes.Response = {
         ///         status_code = 200;
-        ///         headers = cert.get_certificate(req);
+        ///         headers = [("Content-Type", "text/plain")];
         ///         body = "Hello, World!";
         ///         ...
         ///     };
+        ///
+        ///     let #ok(certificate_headers) = cert.get_certificate(req, res, null);
+        ///     return { res with headers = Array.append(res.headers, certificate_headers};
         /// };
         /// ```
-        public func get_certificate(req : HttpTypes.Request, res : HttpTypes.Response) : Result<[HttpTypes.Header], Text> {
-            Module.get_certificate(internal, req, res);
+        public func get_certificate(req : HttpTypes.Request, res : HttpTypes.Response, response_hash : ?Blob) : Result<[HttpTypes.Header], Text> {
+            Module.get_certificate(internal, req, res, response_hash);
         };
 
         /// Retrieves the encoded certificate and tree based on the given keys.
         /// If keys are set to `null`, the entire tree is returned.
-        public func get_certified_tree(keys: ?[Text]) : Result<CertifiedTree, Text> {
+        public func get_certified_tree(keys : ?[Text]) : Result<CertifiedTree, Text> {
             Module.get_certified_tree(internal, keys);
         };
     };
@@ -154,7 +155,7 @@ module Module {
 
         MerkleTreeOps.put(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)], endpoint_record.hash);
 
-        let paths = Iter.toArray(Text.tokens(endpoint_record.url, #text "/"));
+        let paths = Iter.toArray(Text.split(endpoint_record.url, #text "/"));
 
         let text_expr_path = Array.tabulate(
             paths.size() + 2,
@@ -169,7 +170,7 @@ module Module {
         // encode the segments to cbor for the expr_path field for the certificate
         let candid_expr_path = to_candid (text_expr_path);
         let cbor_res = CBOR.encode(candid_expr_path, [], null);
-        let encoded_expr_path = switch(cbor_res){
+        let encoded_expr_path = switch (cbor_res) {
             case (#ok(encoded_expr_path)) encoded_expr_path;
             case (#err(errMsg)) Debug.trap("Internal Error: Report bug in NatLabs/certified-assets repo.\n\t" # errMsg);
         };
@@ -239,16 +240,16 @@ module Module {
         ic_certificate_expression := Text.join(" ", Text.tokens(ic_certificate_expression, #predicate(func(c : Char) : Bool = c == ' ' or c == '\n')));
 
         let expr_hash = SHA256.fromBlob(#sha256, Text.encodeUtf8(ic_certificate_expression));
-        
+
         var request_hash : Blob = "";
 
         if (not no_request_certification and not no_certification) {
 
             let buffer = Buffer.Buffer<(Text, RepIndyHash.Value)>(8);
 
-            for ((name, body) in certified_request_headers.vals()) {
-                if (body.size() != 0) {
-                    buffer.add((Text.toLowercase(name), #Text(body)));
+            for ((name, value) in certified_request_headers.vals()) {
+                if (value.size() != 0) {
+                    buffer.add((Text.toLowercase(name), #Text(value)));
                 };
             };
 
@@ -258,8 +259,8 @@ module Module {
             let query_params = Array.tabulate(
                 certified_query_params.size(),
                 func(i : Nat) : Text {
-                    let (name, body) = certified_query_params[i];
-                    (name # body);
+                    let (name, value) = certified_query_params[i];
+                    (name # "=" # value);
                 },
             );
 
@@ -269,11 +270,11 @@ module Module {
             buffer.add((IC_CERT_QUERY, #Blob(hashed_query_params)));
 
             let rep_val = #Map(Buffer.toArray(buffer));
-            let request_header_hash = Blob.fromArray(RepIndyHash.hash_val(rep_val));
+            let request_header_hash = RepIndyHash.hash_val(rep_val);
 
-            let request_body_hash : Blob = ""; // the body is empty because this is expected to be either a GET, HEAD or OPTIONS requests
-
-            request_hash := SHA256.fromArray(#sha256, Array.append(Blob.toArray(request_header_hash), Blob.toArray(request_body_hash)));
+            let request_body_hash : Blob = SHA256.fromBlob(#sha256, ""); // the body is empty because this is expected to be either a GET, HEAD or OPTIONS requests
+            // Debug.print("request rep val: " # debug_show rep_val);
+            request_hash := SHA256.fromArray(#sha256, Array.append(request_header_hash, Blob.toArray(request_body_hash)));
         };
 
         var response_hash : Blob = "";
@@ -294,17 +295,18 @@ module Module {
             buffer.add((IC_CERT_STATUS, #Nat(Nat16.toNat(status))));
 
             let rep_val = #Map(Buffer.toArray(buffer));
-            let response_headers_hash = Blob.fromArray(RepIndyHash.hash_val(rep_val));
+            let response_headers_hash = RepIndyHash.hash_val(rep_val);
 
-            let headers_and_body_hash = Blob.fromArray(
-                Array.append(
-                    Blob.toArray(response_headers_hash),
-                    Blob.toArray(endpoint_record.hash),
-                )
+            let headers_and_body_hash = Array.append(
+                response_headers_hash,
+                Blob.toArray(endpoint_record.hash),
             );
 
-            response_hash := SHA256.fromBlob(#sha256, headers_and_body_hash);
+            response_hash := SHA256.fromArray(#sha256, headers_and_body_hash);
         };
+
+        // Debug.print("request_hash: " # debug_show request_hash);
+        // Debug.print("response_hash: " # debug_show response_hash);
 
         assert (not no_certification) or (no_certification and ((request_hash == "") and (response_hash == "")));
 
@@ -314,15 +316,14 @@ module Module {
 
         MerkleTreeOps.setCertifiedData(ct);
 
-        let metadata : Metadata = { 
-            endpoint = endpoint_record; 
+        let metadata : Metadata = {
+            endpoint = endpoint_record;
             encoded_expr_path;
             full_expr_path;
             ic_certificate_expression;
         };
 
         let buffer = Buffer.Buffer<(Text, RepIndyHash.Value)>(3);
-        
 
         // this is not an official field, but it is used internally to uniquely identify the http request
         buffer.add((IC_CERT_BODY, #Blob(endpoint_record.hash)));
@@ -402,7 +403,7 @@ module Module {
                             func(vector : Vector<Metadata>) : Iter<EndpointRecord> {
                                 Iter.map(
                                     Vector.vals(vector),
-                                    func (metadata : Metadata) : EndpointRecord {
+                                    func(metadata : Metadata) : EndpointRecord {
                                         metadata.endpoint;
                                     },
                                 );
@@ -424,48 +425,47 @@ module Module {
     };
 
     /// Modifies a given response by adding the certificate headers.
-    public func get_certified_response(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response) : Result<HttpTypes.Response, Text> {
-        let headers_res = get_certificate(ct, req, res);
+    public func get_certified_response(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response, response_hash: ?Blob) : Result<HttpTypes.Response, Text> {
+        let headers_res = get_certificate(ct, req, res, response_hash);
         let #ok(headers) = headers_res else return Utils.send_error(headers_res);
 
         #ok({ res with headers = Array.append(res.headers, headers) });
     };
 
     /// Get the certificate headers for a given request.
-    public func get_certificate(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response) : Result<[HttpTypes.Header], Text> {
-        if (req.certificate_version == ?2) v2(ct, req, res) else v1(ct, req);
+    public func get_certificate(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response, response_hash: ?Blob) : Result<[HttpTypes.Header], Text> {
+        if (req.certificate_version == ?2) v2(ct, req, res, response_hash) else v1(ct, req);
     };
 
     public type CertifiedTree = {
-        certificate: Blob;
-        tree: Blob;
+        certificate : Blob;
+        tree : Blob;
     };
 
     // /// Get the sha256 hash of the given data.
     // public func get_hash(ct: StableStore, endpoint: Endpoint): ?Blob {
-        
+
     // };
 
     /// Retrieves the certificate tree based on the given keys.
     /// If keys are set to `null`, the entire tree is returned.
-    public func get_certified_tree(ct: StableStore, keys: ?[Text]): Result<CertifiedTree, Text> {
+    public func get_certified_tree(ct : StableStore, keys : ?[Text]) : Result<CertifiedTree, Text> {
         let ?certificate = CertifiedData.getCertificate() else {
             return #err("CertifiedData.getCertificate() failed: no data certificate available. \nTry calling this as a query call, if you are calling it as an update call.");
         };
 
         let vec = Vector.new<[Blob]>();
 
-        let keys_iter : Iter<Text> = switch(keys){
+        let keys_iter : Iter<Text> = switch (keys) {
             case (?keys) keys.vals();
             case (null) Map.keys(ct.metadata_map);
         };
 
-        label for_loop
-        for (key in keys_iter){
+        label for_loop for (key in keys_iter) {
             // v1 certification
             Vector.add(vec, ["http_assets", Text.encodeUtf8(key)] : [Blob]);
 
-            let nested_map = switch(Map.get(ct.metadata_map, thash, key)){
+            let nested_map = switch (Map.get(ct.metadata_map, thash, key)) {
                 case (?nested_map) nested_map;
                 case (null) continue for_loop;
             };
@@ -481,7 +481,7 @@ module Module {
         let witness = MerkleTreeOps.reveals(ct, Vector.vals(vec));
         let tree = MerkleTreeOps.encodeWitness(witness);
 
-        #ok({certificate; tree});
+        #ok({ certificate; tree });
     };
 
     func v1(ct : StableStore, req : HttpTypes.Request) : Result<[HttpTypes.Header], Text> {
@@ -489,7 +489,7 @@ module Module {
         let url_path = url.path.original;
 
         let result = get_certified_tree(ct, ?[url_path]);
-        let #ok({ certificate; tree}) = result else return Utils.send_error(result);
+        let #ok({ certificate; tree }) = result else return Utils.send_error(result);
 
         return #ok([(
             "ic-certificate",
@@ -497,12 +497,12 @@ module Module {
         )]);
     };
 
-    func v2(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response) : Result<[HttpTypes.Header], Text> {
+    func v2(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response, response_hash: ?Blob) : Result<[HttpTypes.Header], Text> {
         let url = HttpParser.URL(req.url, HttpParser.Headers([]));
         let url_path = url.path.original;
 
-        let ?metadata = get_metadata(ct, req, res) else return #err("no metadata found for this url");
-        Debug.print("metadata: " # debug_show(metadata));
+        let ?metadata = get_metadata(ct, req, res, response_hash) else return #err("no metadata found for this url");
+        // Debug.print("metadata: " # debug_show (metadata));
 
         let witness = MerkleTreeOps.reveal(ct, metadata.full_expr_path);
         let encoded_witness = MerkleTreeOps.encodeWitness(witness);
@@ -524,28 +524,41 @@ module Module {
         ]);
     };
 
-    func get_metadata(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response) : ?Metadata {
+    func get_metadata(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response, response_hash: ?Blob) : ?Metadata {
         let url = HttpParser.URL(req.url, HttpParser.Headers([]));
 
-        let endpoint = Endpoint(req.url, ?res.body)
-            .method(req.method)
-            .request_headers(req.headers)
-            .response_headers(res.headers)
-            .status(res.status_code)
-            .query_params(Iter.toArray(url.queryObj.trieMap.entries()));
+        let endpoint = switch(response_hash){
+            case (?response_hash) {
+                Endpoint(req.url, null)
+                    .method(req.method)
+                    .query_params(Iter.toArray(url.queryObj.trieMap.entries()))
+                    .request_headers(req.headers)
+                    .response_headers(res.headers)
+                    .status(res.status_code)
+                    .hash(response_hash);
+            };
+            case (null) {
+                Endpoint(req.url, null)
+                    .method(req.method)
+                    .query_params(Iter.toArray(url.queryObj.trieMap.entries()))
+                    .request_headers(req.headers)
+                    .response_headers(res.headers)
+                    .status(res.status_code);
+            };
+        };
 
         get_metadata_from_endpoint(ct, endpoint.build());
     };
 
     func get_metadata_from_endpoint(ct : StableStore, endpoint_record : EndpointRecord) : ?Metadata {
-        Debug.print("Starting get_metadata_from_endpoint" # debug_show(endpoint_record.url));
+        // Debug.print("Starting get_metadata_from_endpoint" # debug_show (endpoint_record.url));
 
         let nested_map = switch (Map.get(ct.metadata_map, thash, endpoint_record.url)) {
             case (?nested_map) nested_map;
             case (null) return null;
         };
 
-        Debug.print("found nested map");
+        // Debug.print("found nested map");
 
         let buffer = Buffer.Buffer<(Text, RepIndyHash.Value)>(3);
         // first check for no certification hash (occurs when only the body is certified)
@@ -555,7 +568,7 @@ module Module {
 
         var metadata_array : [Metadata] = switch (Map.get(nested_map, bhash, no_certification_hash)) {
             case (?vec) Vector.toArray(vec);
-            case (null)[];
+            case (null) [];
         };
 
         // if empty, check for only response certification
@@ -605,11 +618,11 @@ module Module {
             contains_all;
         };
 
-        Debug.print("endpoint query_params: " # debug_show(endpoint_record.query_params));
-        Debug.print("endpoint response_headers: " # debug_show(endpoint_record.response_headers));
-        Debug.print("endpoint request_headers: " # debug_show(endpoint_record.request_headers));
+        // Debug.print("endpoint query_params: " # debug_show (endpoint_record.query_params));
+        // Debug.print("endpoint response_headers: " # debug_show (endpoint_record.response_headers));
+        // Debug.print("endpoint request_headers: " # debug_show (endpoint_record.request_headers));
 
-        Debug.print("metadata_array: " # debug_show(metadata_array));
+        // Debug.print("metadata_array: " # debug_show (metadata_array));
 
         for (metadata in metadata_array.vals()) {
             var check = true;

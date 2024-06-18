@@ -37,10 +37,16 @@ import CertifiedAssets "mo:certified-assets";
 Define an `Endpoint` with the URL where the asset will be hosted, the data for certification, and optionally, details about the HTTP request and response.
 
 ```motoko
-    let endpoint = CertifiedAssets.Endpoint("/hello.txt", "Hello, World!");
+    let endpoint = CertifiedAssets.Endpoint("/hello.txt", ?"Hello, World!");
     certs.certify(endpoint);
 ```
+The above method creates a new sha256 hash of the data, if you already have the hash, you can pass it in via the `hash()` method to avoid recomputing it.
 
+```motoko
+    let endpoint = CertifiedAssets.Endpoint("/hello.txt", ?"Hello, World!")
+        .hash(<sha256 hash of "Hello, World!">);
+    certs.certify(endpoint);
+```
 [Certification V2](https://github.com/dfinity/interface-spec/blob/master/spec/http-gateway-protocol-spec.md#response-verification) allows for the inclusion of additional optional information in the future response's certificate. 
 
 These additional parameters include:
@@ -90,12 +96,18 @@ To serve a certified asset, call the `get_certified_response()` function with th
             upgrade = null;
         };
 
-        let result = certs.get_certified_response(req, res);
+        let result = certs.get_certified_response(req, res, null);
 
         let #ok(certified_response) = result else return Debug.trap(debug_show result);
             
         return certified_response;
     };
+```
+
+Once again, you can include the hash of the data when retrieving the certified response to avoid recomputing it.
+
+```motoko
+    let result = certs.get_certified_response(req, res, ?sha256_of_html_page);
 ```
 
 
