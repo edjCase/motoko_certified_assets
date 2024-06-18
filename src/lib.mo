@@ -152,16 +152,22 @@ module Module {
 
     public func certify(ct : StableStore, endpoint : Endpoint) {
         let endpoint_record = endpoint.build();
-
+        // Debug.print("certifying endpoint: " # debug_show (endpoint_record.url));
         MerkleTreeOps.put(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)], endpoint_record.hash);
 
-        let paths = Iter.toArray(Text.split(endpoint_record.url, #text "/"));
-
+        let paths = if (endpoint_record.url == "") [""] else Iter.toArray(
+            Text.split(endpoint_record.url, #text "/")
+        );
+        
+        // Debug.print("url: " # debug_show endpoint_record.url);
+        // Debug.print("paths: " # debug_show paths);
         let text_expr_path = Array.tabulate(
             paths.size() + 2,
             func(i : Nat) : Text {
                 if (i == 0) return "http_expr";
                 if (i < paths.size() + 1) return paths[i - 1];
+
+                // if (Text.endsWith(endpoint_record.url, #text ".html")) return "<$>";
 
                 return if (endpoint_record.is_fallback_path) "<*>" else "<$>";
             },
@@ -193,47 +199,47 @@ module Module {
         var ic_certificate_expression = switch (no_certification, no_request_certification) {
             case (true, _) {
                 "
-                        default_certification (
-                            ValidationArgs {
-                                no_certification: Empty { }
-                            }
-                        )
-                    ";
+                    default_certification (
+                        ValidationArgs {
+                            no_certification: Empty { }
+                        }
+                    )
+                ";
             };
             case (false, true) {
                 "
-                        default_certification (
-                            ValidationArgs {
-                                certification: Certification {
-                                    no_request_certification: Empty { },
-                                    response_certification: ResponseCertification {
-                                        certified_response_headers: ResponseHeaderList {
-                                            headers: " # debug_show response_headers_fields # "
-                                        }
+                    default_certification (
+                        ValidationArgs {
+                            certification: Certification {
+                                no_request_certification: Empty { },
+                                response_certification: ResponseCertification {
+                                    certified_response_headers: ResponseHeaderList {
+                                        headers: " # debug_show response_headers_fields # "
                                     }
                                 }
                             }
-                        )
-                    ";
+                        }
+                    )
+                ";
             };
             case (false, false) {
                 "
-                        default_certification (
-                            ValidationArgs {
-                                certification: Certification {
-                                    request_certification: RequestCertification {
-                                        certified_request_headers: " # debug_show request_headers_fields # ",
-                                        certified_query_parameters: " # debug_show query_params_fields # "
-                                    },
-                                    response_certification: ResponseCertification {
-                                        certified_response_headers: ResponseHeaderList {
-                                            headers: " # debug_show response_headers_fields # "
-                                        }
+                    default_certification (
+                        ValidationArgs {
+                            certification: Certification {
+                                request_certification: RequestCertification {
+                                    certified_request_headers: " # debug_show request_headers_fields # ",
+                                    certified_query_parameters: " # debug_show query_params_fields # "
+                                },
+                                response_certification: ResponseCertification {
+                                    certified_response_headers: ResponseHeaderList {
+                                        headers: " # debug_show response_headers_fields # "
                                     }
                                 }
                             }
-                        )
-                    ";
+                        }
+                    )
+                ";
             };
         };
 
@@ -367,8 +373,7 @@ module Module {
     /// Remove a certified EndpointModule.
     public func remove(ct : StableStore, endpoint : Endpoint) {
         let endpoint_record = endpoint.build();
-        let url = HttpParser.URL(endpoint_record.url, HttpParser.Headers([]));
-        MerkleTreeOps.delete(ct, ["http_assets", Text.encodeUtf8(url.path.original)]);
+        MerkleTreeOps.delete(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)]);
 
         let ?metadata = get_metadata_from_endpoint(ct, endpoint_record) else return;
         MerkleTreeOps.delete(ct, metadata.full_expr_path);
@@ -378,10 +383,10 @@ module Module {
 
     /// Removes all the certified endpoints that match the given URL.
     public func remove_all(ct : StableStore, url : Text) {
-        let _url = HttpParser.URL(url, HttpParser.Headers([]));
-        MerkleTreeOps.delete(ct, ["http_assets", Text.encodeUtf8(_url.path.original)]);
+        let endpoint = Endpoint(url, null).build();
+        MerkleTreeOps.delete(ct, ["http_assets", Text.encodeUtf8(endpoint.url)]);
 
-        let ?nested_map = Map.remove(ct.metadata_map, thash, _url.path.original) else return;
+        let ?nested_map = Map.remove(ct.metadata_map, thash, endpoint.url) else return;
 
         for ((_, vector) in Map.entries(nested_map)) {
             for (metadata in Vector.vals(vector)) {
@@ -538,7 +543,7 @@ module Module {
                     .hash(response_hash);
             };
             case (null) {
-                Endpoint(req.url, null)
+                Endpoint(req.url, ?res.body)
                     .method(req.method)
                     .query_params(Iter.toArray(url.queryObj.trieMap.entries()))
                     .request_headers(req.headers)
@@ -558,7 +563,7 @@ module Module {
             case (null) return null;
         };
 
-        // Debug.print("found nested map");
+        // Debug.print("found nested map: " # debug_show Map.toArray(nested_map));
 
         let buffer = Buffer.Buffer<(Text, RepIndyHash.Value)>(3);
         // first check for no certification hash (occurs when only the body is certified)
