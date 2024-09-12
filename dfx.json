@@ -1,25 +1,25 @@
 {
-    "version": 1,
-    "defaults": {
-        "build": {
-            "packtool": "mops sources",
-            "args": ""
-        }
-    },
-    "canisters":{
-        "demo": {
-            "type": "motoko",
-            "main": "./demo/main.mo"
-        },
-        "actor_test": {
-            "type": "motoko",
-            "main": "./tests/Actor.Test.mo"
-        }
-    },
-    "networks": {
-        "local": {
-            "bind": "127.0.0.1:8000",
-            "type": "ephemeral"
-        }
+  "version": 1,
+  "defaults": {
+    "build": {
+      "packtool": "mops sources",
+      "args": ""
     }
+  },
+  "canisters": {
+    "demo": {
+      "type": "motoko",
+      "main": "./demo/main.mo"
+    },
+    "actor_test": {
+      "type": "motoko",
+      "main": "./tests/CertifiedAssets.Test.mo"
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
 }

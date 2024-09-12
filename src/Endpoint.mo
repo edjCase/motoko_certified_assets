@@ -1,29 +1,11 @@
-import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Buffer "mo:base/Buffer";
-import Char "mo:base/Char";
-import Debug "mo:base/Debug";
-import Error "mo:base/Error";
-import Iter "mo:base/Iter";
-import Int "mo:base/Int";
 import Nat16 "mo:base/Nat16";
-import Option "mo:base/Option";
-import Result "mo:base/Result";
 import Text "mo:base/Text";
 
-import CertTree "mo:ic-certification/CertTree";
-import MerkleTree "mo:ic-certification/MerkleTree";
-import CanisterSigs "mo:ic-certification/CanisterSigs";
-import CertifiedData "mo:base/CertifiedData";
 import SHA256 "mo:sha2/Sha256";
 import HttpParser "mo:http-parser";
 import HttpTypes "mo:http-types";
-import { CBOR } "mo:serde";
-import Map "mo:map/Map";
-import RepIndyHash "mo:rep-indy-hash";
-import Vector "mo:vector";
-
-import Base64 "mo:encoding/Base64";
 
 import Utils "Utils";
 
@@ -158,43 +140,27 @@ module {
             return self;
         };
 
-        let url_text_array = Iter.toArray<Char>(url_text.chars());
+        let url = HttpParser.URL(url_text, HttpParser.Headers([]));
 
-        let start = switch (Array.indexOf('/', url_text_array, Char.equal)) {
-            case (null) 0;
-            case (?first_slash_pos) first_slash_pos + 1;
+        for (entry in url.queryObj.trieMap.entries()) {
+            _queries.add(entry);
         };
-
-        let end = switch (Array.indexOf('?', url_text_array, Char.equal)) {
-            case (null) url_text_array.size();
-            case (?first_question_mark_pos) first_question_mark_pos;
-        };
-
-        let url_path = Text.join(
-            "",
-            Array.tabulate(
-                end - start,
-                func(i : Nat) : Text {
-                    Char.toText(url_text_array[Int.abs(i + start)]);
-                },
-            ).vals(),
-        );
-
 
         public func build() : EndpointRecord {
-            let url = Utils.percent_decoding(url_path);
+
             let record : EndpointRecord = {
-                url;
+                url = url.path.original;
                 hash = _hash;
                 method = _method;
-                query_params = if (_no_request_certification) [] else Buffer.toArray(_queries);
-                request_headers = if (_no_request_certification) [] else Buffer.toArray(_request_headers);
+                query_params = if (_no_request_certification)[] else Buffer.toArray(_queries);
+                request_headers = if (_no_request_certification)[] else Buffer.toArray(_request_headers);
                 status = _status;
-                response_headers = if (_no_certification) [] else Buffer.toArray(_response_headers);
+                response_headers = if (_no_certification)[] else Buffer.toArray(_response_headers);
                 no_certification = _no_certification;
                 no_request_certification = _no_request_certification;
                 is_fallback_path = _is_fallback_path;
             };
+            record;
         };
     };
 };

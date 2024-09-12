@@ -2,7 +2,7 @@
 name = "certified-assets"
 description = "A library for certifying assets served via HTTP, ensuring the security of query calls on the IC."
 repository = "https://github.com/NatLabs/certified-assets"
-version = "0.3.1"
+version = "0.3.2"
 license = "MIT"
 keywords = ["assets", "http", "certification"]
 
@@ -23,3 +23,6 @@ vector = "0.4.0"
 test = "2.0.0"
 bench = "1.0.0"
 fuzz = "0.2.1"
+
+[toolchain]
+wasmtime = "24.0.0"
