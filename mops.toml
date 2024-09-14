@@ -2,7 +2,7 @@
 name = "certified-assets"
 description = "A library for certifying assets served via HTTP, ensuring the security of query calls on the IC."
 repository = "https://github.com/NatLabs/certified-assets"
-version = "0.3.3"
+version = "0.3.4"
 license = "MIT"
 keywords = ["assets", "http", "certification"]
 
@@ -10,7 +10,7 @@ keywords = ["assets", "http", "certification"]
 base = "0.12.1"
 ic-certification = "0.1.3"
 sha2 = "0.1.0"
-http-parser = "0.3.2"
+http-parser = "0.3.3"
 http-types = "1.0.1"
 encoding = "https://github.com/aviate-labs/encoding.mo#v0.4.1@2711d18727e954b11afc0d37945608512b5fbce2"
 serde = "3.1.0"

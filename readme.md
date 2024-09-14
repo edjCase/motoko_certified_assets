@@ -19,8 +19,16 @@ mops install certified-assets
 
 To begin using Certified Assets, import the module into your project:
 
+- class version
+
 ```motoko
 import CertifiedAssets "mo:certified-assets";
+```
+
+- stable version
+
+```motoko
+import CertifiedAssets "mo:certified-assets/CertifiedAssets";
 ```
 
 #### Create a new instance

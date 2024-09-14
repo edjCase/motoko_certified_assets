@@ -2,15 +2,12 @@ import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
-import Error "mo:base/Error";
 import Iter "mo:base/Iter";
 import Nat16 "mo:base/Nat16";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
 
-import CertTree "mo:ic-certification/CertTree";
 import MerkleTree "mo:ic-certification/MerkleTree";
-import CanisterSigs "mo:ic-certification/CanisterSigs";
 import CertifiedData "mo:base/CertifiedData";
 import SHA256 "mo:sha2/Sha256";
 import HttpParser "mo:http-parser";
@@ -320,8 +317,8 @@ module Module {
     public func remove(ct : StableStore, endpoint : Endpoint) {
         let endpoint_record = endpoint.build();
         remove_record(ct, endpoint_record);
-
     };
+
     public func remove_record(ct : StableStore, endpoint_record : EndpointRecord) {
         let ?(vector, index) = get_metadata_index_from_endpoint(ct, endpoint_record) else return;
 
