@@ -80,7 +80,7 @@ module Module {
         MerkleTreeOps.put(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)], endpoint_record.hash);
 
         let paths = if (endpoint_record.url == "")[""] else Iter.toArray(
-            Text.split(endpoint_record.url, #text "/")
+            Text.tokens(endpoint_record.url, #text "/")
         );
 
         // Debug.print("url: " # debug_show endpoint_record.url);
