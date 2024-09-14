@@ -75,6 +75,10 @@ module Module {
 
     public func certify(ct : StableStore, endpoint : Endpoint) {
         let endpoint_record = endpoint.build();
+        certify_record(ct, endpoint_record);
+    };
+
+    public func certify_record(ct : StableStore, endpoint_record : EndpointRecord) {
         // Debug.print("certifying endpoint: " # debug_show (endpoint_record.url));
         MerkleTreeOps.put(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)], endpoint_record.hash);
 
@@ -291,19 +295,39 @@ module Module {
                 ignore Map.put(nested_map, bhash, unique_http_hash, vector);
             };
             case (?(vector)) switch (get_metadata_index_from_vector(endpoint_record, vector)) {
-                case (?index) { Vector.put(vector, index, metadata) };
+                case (?(_, index)) { Vector.put(vector, index, metadata) };
                 case (null) { Vector.add(vector, metadata) };
             };
         };
     };
 
+    func vector_remove<A>(vec : Vector<A>, index : Nat) : ?A {
+
+        let size = Vector.size(vec);
+
+        if (size == 0) return null;
+
+        let last_index = size - 1 : Nat;
+
+        if (last_index == index) return Vector.removeLast(vec);
+
+        let tmp = Vector.get(vec, last_index);
+        Vector.put(vec, index, tmp);
+        Vector.removeLast(vec);
+    };
+
     /// Remove a certified EndpointModule.
     public func remove(ct : StableStore, endpoint : Endpoint) {
         let endpoint_record = endpoint.build();
-        MerkleTreeOps.delete(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)]);
+        remove_record(ct, endpoint_record);
 
-        let ?metadata = get_metadata_from_endpoint(ct, endpoint_record) else return;
+    };
+    public func remove_record(ct : StableStore, endpoint_record : EndpointRecord) {
+        let ?(vector, index) = get_metadata_index_from_endpoint(ct, endpoint_record) else return;
+
+        let ?metadata = vector_remove(vector, index) else return;
         MerkleTreeOps.delete(ct, metadata.full_expr_path);
+        MerkleTreeOps.delete(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)]);
 
         MerkleTreeOps.setCertifiedData(ct);
     };
@@ -478,6 +502,17 @@ module Module {
 
     public func get_metadata_from_endpoint(ct : StableStore, endpoint_record : EndpointRecord) : ?Metadata {
 
+        let opt_index = get_metadata_index_from_endpoint(ct, endpoint_record);
+
+        switch (opt_index) {
+            case (?(vec, index)) ?Vector.get(vec, index);
+            case (null) null;
+        };
+
+    };
+
+    public func get_metadata_index_from_endpoint(ct : StableStore, endpoint_record : EndpointRecord) : ?(Vector<Metadata>, Nat) {
+
         let nested_map = switch (Map.get(ct.metadata_map, thash, endpoint_record.url)) {
             case (?nested_map) nested_map;
             case (null) return null;
@@ -489,43 +524,50 @@ module Module {
 
         let no_certification_hash = Blob.fromArray(RepIndyHash.hash_val(#Map(Buffer.toArray(buffer))));
 
-        var metadata_array = switch (Map.get(nested_map, bhash, no_certification_hash)) {
-            case (?vec) Vector.clone(vec);
-            case (null) Vector.new<Metadata>();
+        switch (Map.get(nested_map, bhash, no_certification_hash)) {
+            case (?vec) {
+                let opt_index = get_metadata_index_from_vector(endpoint_record, vec);
+                switch (opt_index) {
+                    case (?(vec, index)) return ?(vec, index);
+                    case (null) {};
+                };
+            };
+            case (null) {};
         };
 
         // if empty, check for only response certification
-        do {
-            buffer.add((IC_CERT_STATUS, #Nat(Nat16.toNat(endpoint_record.status))));
-            let no_request_certification_hash = Blob.fromArray(RepIndyHash.hash_val(#Map(Buffer.toArray(buffer))));
 
-            switch (Map.get(nested_map, bhash, no_request_certification_hash)) {
-                case (?vec) {
-                    Vector.addFromIter(metadata_array, Vector.vals(vec));
+        buffer.add((IC_CERT_STATUS, #Nat(Nat16.toNat(endpoint_record.status))));
+        let no_request_certification_hash = Blob.fromArray(RepIndyHash.hash_val(#Map(Buffer.toArray(buffer))));
+
+        switch (Map.get(nested_map, bhash, no_request_certification_hash)) {
+            case (?vec) {
+                let opt_index = get_metadata_index_from_vector(endpoint_record, vec);
+                switch (opt_index) {
+                    case (?(vec, index)) return ?(vec, index);
+                    case (null) {};
                 };
-                case (null) {};
             };
+            case (null) {};
         };
 
         // if empty, check for full certification
-        do {
-            buffer.add((IC_CERT_METHOD, #Text(endpoint_record.method)));
-            let unique_http_hash = Blob.fromArray(RepIndyHash.hash_val(#Map(Buffer.toArray(buffer))));
 
-            switch (Map.get(nested_map, bhash, unique_http_hash)) {
-                case (?vec) {
-                    Vector.addFromIter(metadata_array, Vector.vals(vec));
+        buffer.add((IC_CERT_METHOD, #Text(endpoint_record.method)));
+        let unique_http_hash = Blob.fromArray(RepIndyHash.hash_val(#Map(Buffer.toArray(buffer))));
+
+        switch (Map.get(nested_map, bhash, unique_http_hash)) {
+            case (?vec) {
+                let opt_index = get_metadata_index_from_vector(endpoint_record, vec);
+                switch (opt_index) {
+                    case (?(vec, index)) return ?(vec, index);
+                    case (null) {};
                 };
-                case (null) {};
             };
+            case (null) {};
         };
 
-        let opt_index = get_metadata_index_from_vector(endpoint_record, metadata_array);
-
-        switch (opt_index) {
-            case (?index) ?Vector.get(metadata_array, index);
-            case (null) null;
-        };
+        return null;
 
     };
 
@@ -550,7 +592,7 @@ module Module {
         contains_all;
     };
 
-    public func get_metadata_index_from_vector(endpoint_record : EndpointRecord, metadata_array : Vector<Metadata>) : ?(Nat) {
+    public func get_metadata_index_from_vector(endpoint_record : EndpointRecord, metadata_array : Vector<Metadata>) : ?(Vector<Metadata>, Nat) {
         // Debug.print("endpoint query_params: " # debug_show (endpoint_record.query_params));
         // Debug.print("endpoint response_headers: " # debug_show (endpoint_record.response_headers));
         // Debug.print("endpoint request_headers: " # debug_show (endpoint_record.request_headers));
@@ -569,7 +611,7 @@ module Module {
             check := check and array_contains_all(endpoint_record.response_headers, metadata.endpoint.response_headers, equal_tuples);
             check := check and array_contains_all(endpoint_record.query_params, metadata.endpoint.query_params, equal_tuples);
 
-            if (check) return ?(i);
+            if (check) return ?(metadata_array, i);
 
             i += 1;
         };

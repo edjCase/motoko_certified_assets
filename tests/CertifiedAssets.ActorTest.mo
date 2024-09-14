@@ -53,4 +53,8 @@ actor {
 
     };
 
+    func test_delete_path(path : Text) : async () {
+        certs.remove_all(path);
+    };
+
 };

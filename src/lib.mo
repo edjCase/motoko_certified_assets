@@ -1,27 +1,15 @@
-import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Buffer "mo:base/Buffer";
-import Debug "mo:base/Debug";
-import Error "mo:base/Error";
 import Iter "mo:base/Iter";
-import Nat16 "mo:base/Nat16";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
 
-import CertTree "mo:ic-certification/CertTree";
-import MerkleTree "mo:ic-certification/MerkleTree";
-import CanisterSigs "mo:ic-certification/CanisterSigs";
-import CertifiedData "mo:base/CertifiedData";
-import SHA256 "mo:sha2/Sha256";
 import HttpParser "mo:http-parser";
 import HttpTypes "mo:http-types";
 import { CBOR } "mo:serde";
 import Map "mo:map/Map";
 import RepIndyHash "mo:rep-indy-hash";
 import Vector "mo:vector";
-import Itertools "mo:itertools/Iter";
-
-import Base64 "mo:encoding/Base64";
 
 import Utils "Utils";
 import EndpointModule "Endpoint";
@@ -85,8 +73,12 @@ module {
 
         public func certify(endpoint : Endpoint) = Stable.certify(internal, endpoint);
 
+        public func certify_record(endpoint_record : EndpointRecord) = Stable.certify_record(internal, endpoint_record);
+
         /// Remove a certified EndpointModule.
         public func remove(endpoint : Endpoint) = Stable.remove(internal, endpoint);
+
+        public func remove_record(endpoint_record : EndpointRecord) = Stable.remove_record(internal, endpoint_record);
 
         /// Removes all the certified endpoints that match the given URL.
         public func remove_all(url : Text) = Stable.remove_all(internal, url);
