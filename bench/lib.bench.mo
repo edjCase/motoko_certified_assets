@@ -1,9 +1,9 @@
 import Text "mo:base/Text";
 import Iter "mo:base/Iter";
 import Debug "mo:base/Debug";
-import Prelude "mo:base/Prelude";
 import Nat16 "mo:base/Nat16";
 import Buffer "mo:base/Buffer";
+import Sha256 "mo:sha2/Sha256";
 
 import Bench "mo:bench";
 import Fuzz "mo:fuzz";
@@ -13,7 +13,7 @@ import HttpTypes "mo:http-types";
 
 module {
 
-    func random_endpoint(fuzz : Fuzz.Fuzzer) : (CertifiedAssets.EndpointRecord, Blob) {
+    func random_endpoint(fuzz : Fuzz.Fuzzer, sha256 : Sha256.Digest) : (CertifiedAssets.EndpointRecord, Blob) {
 
         let status_codes = [200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 300, 301, 302, 303, 304, 305, 306, 307, 308, 400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451, 500, 501, 502, 503, 504, 505, 506, 507, 508, 510, 511];
 
@@ -57,9 +57,13 @@ module {
         let include_random_blob = fuzz.nat.randomRange(0, 10) > 5;
         let include_request_certification = fuzz.nat.randomRange(0, 10) > 10;
 
-        let endpoint = CertifiedAssets.Endpoint(path, null);
-
         let body = if (include_random_blob) { blob } else { hello_world_blob };
+
+        sha256.writeBlob(body);
+        let hash = sha256.sum();
+        sha256.reset();
+
+        let endpoint = CertifiedAssets.Endpoint(path, null).hash(hash);
 
         ignore endpoint.body(body);
 
@@ -109,14 +113,15 @@ module {
         ]);
 
         let fuzz = Fuzz.Fuzz();
+        let sha256 = Sha256.Digest(#sha256);
         let limit = 1000;
         let cert_store = CertifiedAssets.init_stable_store();
-        let certs = CertifiedAssets.CertifiedAssets(?cert_store);
+        let certs = CertifiedAssets.CertifiedAssets(cert_store);
         let endpoint_records = Buffer.Buffer<(CertifiedAssets.EndpointRecord)>(limit);
         let endpoint_bodies = Buffer.Buffer<(Blob)>(limit);
 
         for (_ in Iter.range(0, limit)) {
-            let (endpoint_record, blob) = random_endpoint(fuzz);
+            let (endpoint_record, blob) = random_endpoint(fuzz, sha256);
             endpoint_records.add(endpoint_record);
             endpoint_bodies.add(blob);
         };

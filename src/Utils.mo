@@ -10,7 +10,7 @@ import Hex "mo:encoding/Hex";
 module {
     type Result<T, E> = Result.Result<T, E>;
 
-    public func send_error<OldOk, NewOk, Error>(res: Result<OldOk, Error>): Result<NewOk, Error>{
+    public func send_error<OldOk, NewOk, Error>(res : Result<OldOk, Error>) : Result<NewOk, Error> {
         switch (res) {
             case (#ok(_)) Prelude.unreachable();
             case (#err(errorMsg)) #err(errorMsg);
@@ -50,6 +50,7 @@ module {
         let n32 = Char.toNat32(char);
         let n = Nat32.toNat(n32);
         let n8 = Nat8.fromNat(n);
+        n8;
     };
 
     public func percent_decoding(t : Text) : Text {

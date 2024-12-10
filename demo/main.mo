@@ -1,5 +1,4 @@
 import Array "mo:base/Array";
-import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
 import Iter "mo:base/Iter";
 import Text "mo:base/Text";
@@ -18,7 +17,7 @@ actor {
     type Vector<A> = Vector.Vector<A>;
 
     stable let st_certs = CertifiedAssets.init_stable_store();
-    let certs = CertifiedAssets.CertifiedAssets(?st_certs);
+    let certs = CertifiedAssets.CertifiedAssets(st_certs);
 
     let { thash } = Map;
 
@@ -120,7 +119,7 @@ actor {
         ).status(200).is_fallback_path();
         certs.certify(homepage_endpoint);
 
-        let homepage_endpoint2 = CertifiedAssets.Endpoint("/home", ?Text.encodeUtf8(_homepage)).no_request_certification().response_header(
+        let homepage_endpoint2 = CertifiedAssets.Endpoint("/home", ?Text.encodeUtf8(_homepage)).response_header(
             "Content-Type",
             "text/html",
         ).response_header(
@@ -192,6 +191,13 @@ actor {
         };
 
         certify_endpoints_page();
+
+        let hello_page = CertifiedAssets.Endpoint("/hello", ?Text.encodeUtf8("👋 Hello World!")).no_request_certification().response_header(
+            "Content-Type",
+            "text/plain",
+        ).status(200);
+
+        certs.certify(hello_page);
     };
 
     func endpoints_json() : Text {
@@ -279,7 +285,7 @@ actor {
         assert req.body == "";
         assert req.method == "GET";
 
-        Debug.print("url: " # url.path.original);
+        Debug.print("http_request: " # debug_show req);
 
         let response : HttpTypes.Response = switch (url.path.original, url.queryObj.get("size")) {
             case ("/endpoints", _) {
@@ -287,6 +293,15 @@ actor {
                     status_code = 200;
                     body = endpoints_page_avant_cert;
                     headers = [("Content-Type", "application/json")];
+                    streaming_strategy = null;
+                    upgrade = null;
+                };
+            };
+            case ("/hello", _) {
+                {
+                    status_code = 200;
+                    body = Text.encodeUtf8("👋 Hello World!");
+                    headers = [("Content-Type", "text/plain")];
                     streaming_strategy = null;
                     upgrade = null;
                 };
@@ -313,9 +328,13 @@ actor {
                     case (_) Debug.trap("Invalid size: " # text_size);
                 };
 
+                let teams = teams_json(?size);
+
+                Debug.print("teams: " # teams);
+
                 {
                     status_code = 200;
-                    body = Text.encodeUtf8(teams_json(?size));
+                    body = Text.encodeUtf8(teams);
                     headers = [("Content-Type", "application/json")];
                     streaming_strategy = null;
                     upgrade = null;
@@ -332,10 +351,18 @@ actor {
             };
             case (_) {
                 // path -> '/v1/teams/:team'
+                var response :  HttpTypes.Response  = {
+                    status_code = 404;
+                    body = Text.encodeUtf8("Not Found");
+                    headers = [];
+                    streaming_strategy = null;
+                    upgrade = null;
+                }; 
+
                 if (Text.startsWith(url.path.original, #text "/v1/teams/")) {
                     let team = url.path.array[2];
                     if (Map.has(teams, thash, team)) {
-                        return {
+                        response := {
                             status_code = 200;
                             body = Text.encodeUtf8(single_team_json(team));
                             headers = [("Content-Type", "application/json")];
@@ -344,13 +371,9 @@ actor {
                         };
                     };
                 };
-                return {
-                    status_code = 404;
-                    body = Text.encodeUtf8("Not Found");
-                    headers = [];
-                    streaming_strategy = null;
-                    upgrade = null;
-                };
+
+                response;
+                
             };
         };
 

@@ -17,6 +17,7 @@ import Map "mo:map/Map";
 import RepIndyHash "mo:rep-indy-hash";
 import Vector "mo:vector";
 import Itertools "mo:itertools/Iter";
+import RevIter "mo:itertools/RevIter";
 
 import Base64 "mo:encoding/Base64";
 
@@ -52,16 +53,25 @@ module Module {
     public type Endpoint = EndpointModule.Endpoint;
     public type EndpointRecord = EndpointModule.EndpointRecord;
 
+    public type HttpRequest = HttpTypes.Request;
+    public type HttpResponse = HttpTypes.Response;
+    public type Header = HttpTypes.Header;
+
     public type CertifiedTree = {
         certificate : Blob;
         tree : Blob;
     };
 
-    let IC_CERTIFICATE_EXPRESSION = "ic-certificateexpression";
-    let IC_CERT_BODY = ":ic-cert-body";
-    let IC_CERT_METHOD = ":ic-cert-method";
-    let IC_CERT_QUERY = ":ic-cert-query";
-    let IC_CERT_STATUS = ":ic-cert-status";
+    public let IC_CERTIFICATE_EXPRESSION = "ic-certificateexpression";
+    public let IC_CERT_BODY = ":ic-cert-body";
+    public let IC_CERT_METHOD = ":ic-cert-method";
+    public let IC_CERT_QUERY = ":ic-cert-query";
+    public let IC_CERT_STATUS = ":ic-cert-status";
+
+    public type CertifiedAssetErrors = {
+        #GetCertifiedDataFailed : Text;
+        #NoMatchingEndpointFound : Text;
+    };
 
     public func init_stable_store() : StableStore {
         {
@@ -75,29 +85,34 @@ module Module {
         certify_record(ct, endpoint_record);
     };
 
-    public func certify_record(ct : StableStore, endpoint_record : EndpointRecord) {
-        // Debug.print("certifying endpoint: " # debug_show (endpoint_record.url));
-        MerkleTreeOps.put(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)], endpoint_record.hash);
+    func url_to_encoded_expr_path(endpoint_record : EndpointRecord) : ([Blob], Blob) {
 
-        let paths = if (endpoint_record.url == "")[""] else Iter.toArray(
+        let paths = Iter.toArray(
             Text.tokens(endpoint_record.url, #text "/")
         );
 
-        // Debug.print("url: " # debug_show endpoint_record.url);
-        // Debug.print("paths: " # debug_show paths);
+        let ends_with_index_dot_html = Text.endsWith(endpoint_record.url, #text("index.html"));
+        let is_fallback = endpoint_record.is_fallback_path;
+
         let text_expr_path = Array.tabulate(
-            paths.size() + 2,
+            paths.size() + (if (ends_with_index_dot_html) 1 else 2),
             func(i : Nat) : Text {
                 if (i == 0) return "http_expr";
-                if (i < paths.size() + 1) return paths[i - 1];
+                if (i < paths.size() + (if (ends_with_index_dot_html) 0 else 1)) return paths[i - 1];
 
-                // if (Text.endsWith(endpoint_record.url, #text ".html")) return "<$>";
-
-                return if (endpoint_record.is_fallback_path) "<*>" else "<$>";
+                if (is_fallback or ends_with_index_dot_html) {
+                    "<*>";
+                } else {
+                    "<$>";
+                };
             },
         );
 
-        // encode the segments to cbor for the expr_path field for the certificate
+        // Debug.print("text_expr_path: " # debug_show text_expr_path);
+        // Debug.print("is_fallback: " # debug_show is_fallback);
+
+        let expr_path = Array.map(text_expr_path, Text.encodeUtf8);
+
         let candid_record_expr_path = #Array(
             Array.map(text_expr_path, func(t : Text) : Serde.Candid = #Text(t))
         );
@@ -108,7 +123,15 @@ module Module {
             case (#err(errMsg)) Debug.trap("Internal Error: Report bug in NatLabs/certified-assets repo.\n\t" # errMsg);
         };
 
-        let expr_path = Array.map(text_expr_path, Text.encodeUtf8);
+        (expr_path, encoded_expr_path);
+
+    };
+
+    public func certify_record(ct : StableStore, endpoint_record : EndpointRecord) {
+        // v1 certification
+        MerkleTreeOps.put(ct, ["http_assets", Text.encodeUtf8(endpoint_record.url)], endpoint_record.hash);
+
+        let (expr_path, encoded_expr_path) = url_to_encoded_expr_path(endpoint_record);
 
         let extract_field = func((field, _) : (Text, Text)) : Text = field;
         let certified_query_params = endpoint_record.query_params;
@@ -120,8 +143,6 @@ module Module {
         let query_params_fields = Array.map(endpoint_record.query_params, extract_field);
         let request_headers_fields = Array.map(endpoint_record.request_headers, extract_field);
         let response_headers_fields = Array.map(endpoint_record.response_headers, extract_field);
-
-        let fields = Buffer.Buffer<Text>(8);
 
         var ic_certificate_expression = switch (no_certification, no_request_certification) {
             case (true, _) {
@@ -172,7 +193,7 @@ module Module {
 
         ic_certificate_expression := Text.join(" ", Text.tokens(ic_certificate_expression, #predicate(func(c : Char) : Bool = c == ' ' or c == '\n')));
 
-        let expr_hash = SHA256.fromBlob(#sha256, Text.encodeUtf8(ic_certificate_expression));
+        let ic_certificate_expression_hash = SHA256.fromBlob(#sha256, Text.encodeUtf8(ic_certificate_expression));
 
         var request_hash : Blob = "";
 
@@ -243,10 +264,11 @@ module Module {
 
         assert (not no_certification) or (no_certification and ((request_hash == "") and (response_hash == "")));
 
-        let full_expr_path = Array.append(expr_path, [expr_hash, request_hash, response_hash]);
+        let full_expr_path = Array.append(expr_path, [ic_certificate_expression_hash, request_hash, response_hash]);
+        // Debug.print("full_expr_path: " # debug_show full_expr_path);
 
+        // v2 certification
         MerkleTreeOps.put(ct, full_expr_path, "");
-
         MerkleTreeOps.setCertifiedData(ct);
 
         let metadata : Metadata = {
@@ -261,15 +283,14 @@ module Module {
         // this is not an official field, but it is used internally to uniquely identify the http request
         buffer.add((IC_CERT_BODY, #Blob(endpoint_record.hash)));
 
-        if (not no_request_certification and not no_certification) {
-            buffer.add((IC_CERT_METHOD, #Text(endpoint_record.method)));
-        };
-
         if (not no_certification) {
             buffer.add((IC_CERT_STATUS, #Nat(Nat16.toNat(endpoint_record.status))));
         };
 
-        // Debug.print("buffer for unique_http_hash: " # debug_show Buffer.toArray(buffer));
+        if (not no_request_certification and not no_certification) {
+            buffer.add((IC_CERT_METHOD, #Text(endpoint_record.method)));
+        };
+
         let unique_http_hash = Blob.fromArray(RepIndyHash.hash_val(#Map(Buffer.toArray(buffer))));
 
         let opt_nested_map = Map.get(ct.metadata_map, thash, endpoint_record.url);
@@ -368,6 +389,24 @@ module Module {
         );
     };
 
+    public func endpoints_by_url(ct : StableStore, url : Text) : Iter<EndpointRecord> {
+        let ?nested_map = Map.get(ct.metadata_map, thash, url) else return [].vals();
+
+        Itertools.flatten(
+            Iter.map(
+                Map.vals(nested_map),
+                func(vector : Vector<Metadata>) : Iter<EndpointRecord> {
+                    Iter.map(
+                        Vector.vals(vector),
+                        func(metadata : Metadata) : EndpointRecord {
+                            metadata.endpoint;
+                        },
+                    );
+                },
+            )
+        );
+    };
+
     /// Clear all certified endpoints.
     public func clear(ct : StableStore) {
         MerkleTreeOps.delete(ct, ["http_assets"]);
@@ -388,6 +427,33 @@ module Module {
     /// Get the certificate headers for a given request.
     public func get_certificate(ct : StableStore, req : HttpTypes.Request, res : HttpTypes.Response, response_hash : ?Blob) : Result<[HttpTypes.Header], Text> {
         if (req.certificate_version == ?2) v2(ct, req, res, response_hash) else v1(ct, req);
+    };
+
+    /// Gets the closest fallback path for the given path that has a certificate associated with it.
+    public func get_fallback_path(ct : StableStore, path : Text) : ?Text {
+
+        let paths = Iter.toArray(Text.split(path, #text("/")));
+
+        for (i in RevIter.range(0, paths.size()).rev()) {
+            let slice = Itertools.fromArraySlice(paths, 0, i + 1);
+            let possible_fallback_prefix = Text.join(("/"), slice);
+            let possible_fallback_key = possible_fallback_prefix # "/index.html";
+
+            switch (Map.get(ct.metadata_map, thash, possible_fallback_key)) {
+                case (?_) return ?possible_fallback_key;
+                case (_) {};
+            };
+        };
+
+        null;
+
+    };
+
+    public func get_fallback_certificate(ct : StableStore, req : HttpTypes.Request, fallback_path : Text, res : HttpTypes.Response, response_hash : ?Blob) : Result<[HttpTypes.Header], Text> {
+
+        let fallback_req = { req with url = fallback_path };
+
+        if (fallback_req.certificate_version == ?2) v2(ct, fallback_req, res, response_hash) else v1(ct, fallback_req);
     };
 
     // /// Get the sha256 hash of the given data.
@@ -457,6 +523,8 @@ module Module {
         let ?certificate = CertifiedData.getCertificate() else {
             return #err("CertifiedData.getCertificate failed. Call this as a query call!");
         };
+
+        // Debug.print("encoded_witness: " # debug_show encoded_witness);
 
         let ic_certificate_fields = [
             "certificate=:" # base64(certificate) # ":",
@@ -590,12 +658,6 @@ module Module {
     };
 
     public func get_metadata_index_from_vector(endpoint_record : EndpointRecord, metadata_array : Vector<Metadata>) : ?(Vector<Metadata>, Nat) {
-        // Debug.print("endpoint query_params: " # debug_show (endpoint_record.query_params));
-        // Debug.print("endpoint response_headers: " # debug_show (endpoint_record.response_headers));
-        // Debug.print("endpoint request_headers: " # debug_show (endpoint_record.request_headers));
-
-        // Debug.print("metadata_array: " # debug_show (metadata_array));
-
         var i = 0;
         for (metadata in Vector.vals(metadata_array)) {
             var check = true;
@@ -622,7 +684,7 @@ module Module {
         utf8;
     };
 
-    module MerkleTreeOps {
+    public module MerkleTreeOps {
         type Path = MerkleTree.Path;
         type Value = MerkleTree.Value;
         type Key = MerkleTree.Key;

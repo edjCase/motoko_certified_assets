@@ -1,6 +1,6 @@
 name: Makefile CI
 
-on: 
+on:
   push:
     branches:
       - main
@@ -22,7 +22,7 @@ jobs:
       - name: Cache Node modules
         uses: actions/cache@v2
         with:
-          path: ~/.npm
+          path: $GITHUB_WORKSPACE/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
@@ -32,26 +32,40 @@ jobs:
         with:
           key: mops-packages-${{ hashFiles('mops.toml') }}
           path: |
-            ~/.cache/mops
-            ~/mops
+            $GITHUB_WORKSPACE/.cache/mops
+            $GITHUB_WORKSPACE/mops
 
-      - uses: aviate-labs/setup-dfx@v0.2.3
-        with:
-          dfx-version: 0.15.0
+      - name: Install dfx
+        uses: dfinity/setup-dfx@main
+      - name: Confirm successful installation
+        run: dfx --version
+
+      - name: Install dfx cache
+        run: dfx cache install
 
       - name: Install mops & mocv
         run: |
-            npm -g i mocv
-            npm --yes -g i ic-mops
-            mops i
+          npm --yes -g i ic-mops
+          mops i
+          mops toolchain init
 
-      - name: install wasmtime
+          # set moc path for dfx to use
+          echo "DFX_MOC_PATH=$(mops toolchain bin moc)" >> $GITHUB_ENV
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Check Rust version
+        run: rustc --version
+
+      - name: Install test dependencies
         run: |
-          curl https://wasmtime.dev/install.sh -sSf | bash
-          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
-
-      - name: Detect warnings
-        run: make check
+          npm install -g zx
+          cargo install idl2json_cli
 
       - name: Run Tests
-        run: make test
+        run: make canister-tests

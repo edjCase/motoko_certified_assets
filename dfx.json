@@ -11,14 +11,14 @@
       "type": "motoko",
       "main": "./demo/main.mo"
     },
-    "actor_test": {
+    "canister-tests": {
       "type": "motoko",
-      "main": "./tests/CertifiedAssets.Test.mo"
+      "main": "./tests/CertifiedAssets.CanisterTests.mo"
     }
   },
   "networks": {
     "local": {
-      "bind": "127.0.0.1:8000",
+      "bind": "127.0.0.1:4943",
       "type": "ephemeral"
     }
   }
