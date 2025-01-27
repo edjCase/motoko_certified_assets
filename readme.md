@@ -179,7 +179,7 @@ For example, if the requested file is `/path/to/file.txt`, valid fallback paths 
         let res : CertifiedAssets.HttpResponse = {
             status_code = 200;
             headers = [];
-            body = Text.encodeUtf8("Hello, World!");
+            body = Text.encodeUtf8("Default Fallback Page");
             streaming_strategy = null;
             upgrade = null;
         };
