@@ -144,14 +144,17 @@ Once again, you can include the hash of the data when retrieving the certified r
 
 <!-- A fallback is any prefix in the path of the requested file that can be used to serve a default index.html file. -->
 
-Asset certification V2 allows you to fallback to a default index.html file if the requested file. Fallbacks only work if the index.html directory path is a prefix of the requested file path. For example, if the requested file is `/path/to/file.txt`, the fallback index.html file could be stored at either `/path/to/index.html`, `/path/index.html` or `/index.html`.
+Asset certification V2 allows you to fallback to a previously certified fallback endpoint if the requested file does not exist.
+Fallbacks only work if there is a certified fallback endpoint that is a prefix of the requested file path.
+For example, if the requested file is `/path/to/file.txt`, valid fallback paths include `/path/to/`, `/path/`, and `/`.
 
-- Certify a fallback index.html file
+- Certify a fallback endpoint
 
 ```motoko
     let fallback = CertifiedAssets
-        .Endpoint("/path/to/index.html", ?"Hello, World!")
-        .status(200);
+        .Endpoint("/path/to/", ?"Default Fallback Page")
+        .status(200)
+        .is_fallback(true);
 
     certs.certify(endpoint);
 ```
@@ -171,7 +174,7 @@ Asset certification V2 allows you to fallback to a default index.html file if th
         // search your file store for the requested file
         // if the file is not found, create a response with the index.html file
 
-        let ?fallback_path = certs.get_fallback_path(req.url);
+        let ?fallback_path = certs.get_fallback_path(req.url); // returns "/path/to/"
 
         let res : CertifiedAssets.HttpResponse = {
             status_code = 200;
@@ -181,12 +184,7 @@ Asset certification V2 allows you to fallback to a default index.html file if th
             upgrade = null;
         };
 
-        // replace the url in the request with the index.html file's path
-        let req_with_fallback_url = { req with url = "/path/to/index.html" };
-
-        let result = certs.get_certified_response(req_with_fallback_url, res, null);
-
-        let #ok(certified_response) = result else return Debug.trap(debug_show result);
+        let #ok(certified_headers) = certs.get_fallback_response(req, fallback_path, res, null);
 
         return certified_response;
 

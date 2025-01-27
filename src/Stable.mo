@@ -596,6 +596,13 @@ module Module {
         if (fallback_req.certificate_version == ?2) v2(ct, fallback_req, res, opt_response_hash, url_to_include_in_witness) else v1(ct, fallback_req);
     };
 
+    public func get_fallback_response(ct : StableStore, req : HttpTypes.Request, fallback_path : Text, res : HttpTypes.Response, opt_response_hash : ?Blob) : Result<HttpTypes.Response, Text> {
+        let headers_res = get_fallback_certificate(ct, req, fallback_path, res, opt_response_hash);
+        let #ok(headers) = headers_res else return Utils.send_error(headers_res);
+
+        #ok({ res with headers = Array.append(res.headers, headers) });
+    };
+
     /// Retrieves the certificate tree based on the given keys.
     /// If keys are set to `null`, the entire tree is returned.
     public func get_certified_tree(ct : StableStore, keys : ?[Text]) : Result<CertifiedTree, Text> {

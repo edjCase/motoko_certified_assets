@@ -38,6 +38,16 @@ module {
     public let IC_CERT_QUERY = Stable.IC_CERT_QUERY;
     public let IC_CERT_STATUS = Stable.IC_CERT_STATUS;
 
+    public let {
+        get_response_hash;
+        get_request_hash;
+        get_ic_certificate_expression;
+        encode_text_expr_path;
+        get_text_expr_path;
+        url_to_encoded_expr_path;
+        http_req_res_to_endpoint;
+    } = Stable;
+
     /// Create a new stable CertifiedAssets instance on the heap.
     /// This instance is stable and will not be cleared on canister upgrade.
     ///
@@ -125,6 +135,10 @@ module {
         ///
         public func get_fallback_certificate(req : HttpTypes.Request, fallback_path : Text, res : HttpTypes.Response, response_hash : ?Blob) : Result<[HttpTypes.Header], Text> {
             Stable.get_fallback_certificate(internal, req, fallback_path, res, response_hash);
+        };
+
+        public func get_fallback_response(req : HttpTypes.Request, fallback_path : Text, res : HttpTypes.Response, response_hash : ?Blob) : Result<HttpTypes.Response, Text> {
+            Stable.get_fallback_response(internal, req, fallback_path, res, response_hash);
         };
 
         /// Gets the fallback index.html file with the closest matching prefix for the given path that has a certificate associated with it.

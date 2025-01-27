@@ -17,43 +17,58 @@ import Base64 "mo:encoding/Base64";
 import RepIndyHash "mo:rep-indy-hash";
 
 import CertifiedAssets "../src";
-import {MerkleTreeOps; IC_CERT_METHOD; IC_CERT_QUERY; IC_CERTIFICATE_EXPRESSION; IC_CERT_STATUS} "../src/Stable";
+import {
+    MerkleTreeOps;
+    IC_CERT_METHOD;
+    IC_CERT_QUERY;
+    IC_CERTIFICATE_EXPRESSION;
+    IC_CERT_STATUS;
+} "../src/Stable";
 import CanisterTests "CanisterTests";
 
 actor {
 
     let suite = CanisterTests.Suite();
 
-   // for running tests
-    public query func run_query_test(test_name: Text) : async CanisterTests.TestResult { suite.run_query(test_name).0; };
+    // for running tests
+    public query func run_query_test(test_name : Text) : async CanisterTests.TestResult {
+        suite.run_query(test_name).0;
+    };
 
-    public func run_test(test_name: Text) : async CanisterTests.TestResult { (await suite.run(test_name)).0; };
+    public func run_test(test_name : Text) : async CanisterTests.TestResult {
+        (await suite.run(test_name)).0;
+    };
 
-    public func get_test_details() : async [CanisterTests.TestDetails] { suite.get_test_details().0; };
+    public func get_test_details() : async [CanisterTests.TestDetails] {
+        suite.get_test_details().0;
+    };
 
-    public func get_test_result(test_name: Text) : async CanisterTests.TestResult { suite.get_test_result(test_name).0; };
+    public func get_test_result(test_name : Text) : async CanisterTests.TestResult {
+        suite.get_test_result(test_name).0;
+    };
 
-    public func get_finished_test_results() : async [CanisterTests.TestResult] { suite.get_finished_test_results().0 };
-
+    public func get_finished_test_results() : async [CanisterTests.TestResult] {
+        suite.get_finished_test_results().0;
+    };
 
     type Result<T, E> = Result.Result<T, E>;
 
     stable let sstore = CertifiedAssets.init_stable_store();
     let certs = CertifiedAssets.CertifiedAssets(sstore);
 
-   func strip_start(t: Text, prefix: Text) : Text = Option.get(
+    func strip_start(t : Text, prefix : Text) : Text = Option.get(
         Text.stripStart(t, #text(prefix)),
         t,
     );
 
     type CertificateDetails = {
-        certificate: Text;
-        tree: Text;
-        version: Text;
-        expr_path: Text;
+        certificate : Text;
+        tree : Text;
+        version : Text;
+        expr_path : Text;
     };
 
-    func split_certificate(ic_certificate: Text) : CertificateDetails {
+    func split_certificate(ic_certificate : Text) : CertificateDetails {
         let split_certificate = Iter.toArray(Text.split(ic_certificate, #text(", ")));
 
         let certificate = strip_start(split_certificate[0], ("certificate="));
@@ -69,7 +84,7 @@ actor {
         };
     };
 
-    func to_cbor(paths: [Text]) : Blob {
+    func to_cbor(paths : [Text]) : Blob {
 
         let candid_record_expr_path = #Array(
             Array.map(paths, func(t : Text) : Serde.Candid = #Text(t))
@@ -85,28 +100,26 @@ actor {
 
     };
 
-    
-
-    func to_base64(blob: Blob) : Text {
+    func to_base64(blob : Blob) : Text {
         let res = Base64.StdEncoding.encode(Blob.toArray(blob));
         let ?utf8 = Text.decodeUtf8(Blob.fromArray(res)) else Debug.trap("base64 encoding failed");
         utf8;
     };
 
-    func encode_expr_path(paths: [Text]) : Text {
+    func encode_expr_path(paths : [Text]) : Text {
         let cbor = to_cbor(paths);
         let base64 = to_base64(cbor);
         ":" # base64 # ":";
     };
 
-    func get_witness(full_expr_path: [Blob]) : Text {
+    func get_witness(full_expr_path : [Blob]) : Text {
         let witness = MerkleTreeOps.reveal(sstore, full_expr_path);
         let encoded_witness = MerkleTreeOps.encodeWitness(witness);
 
         ":" # to_base64(encoded_witness) # ":";
     };
 
-    func get_request_hash(method: Text, certified_request_headers: [(Text, Text)], certified_query_params: [(Text, Text)]): Blob {
+    func get_request_hash(method : Text, certified_request_headers : [(Text, Text)], certified_query_params : [(Text, Text)]) : Blob {
         let buffer = Buffer.Buffer<(Text, RepIndyHash.Value)>(8);
 
         for ((name, value) in certified_request_headers.vals()) {
@@ -138,7 +151,7 @@ actor {
         SHA256.fromArray(#sha256, Array.append(request_header_hash, Blob.toArray(request_body_hash)));
     };
 
-    func get_respoonse_hash(status: Nat16, certified_response_headers: [(Text, Text)], body_hash: Blob, ic_certificate_expression: Text): Blob {
+    func get_respoonse_hash(status : Nat16, certified_response_headers : [(Text, Text)], body_hash : Blob, ic_certificate_expression : Text) : Blob {
         let buffer = Buffer.Buffer<(Text, RepIndyHash.Value)>(8);
 
         for ((name, value) in certified_response_headers.vals()) {
@@ -162,8 +175,6 @@ actor {
         SHA256.fromArray(#sha256, headers_and_body_hash);
     };
 
-
-
     suite.add(
         "verify certificate headers - upload hello file",
         func({ ts_assert; ts_print; ts_assert_or_print } : CanisterTests.TestTools) : async () {
@@ -184,8 +195,8 @@ actor {
     );
 
     suite.add_query(
-        "verify certificate headers - headers should match expected values", 
-        func({ ts_assert; ts_print; ts_assert_or_print } : CanisterTests.TestTools): (){
+        "verify certificate headers - headers should match expected values",
+        func({ ts_assert; ts_print; ts_assert_or_print } : CanisterTests.TestTools) : () {
 
             let req : CertifiedAssets.HttpRequest = {
                 method = "GET";
@@ -197,7 +208,7 @@ actor {
 
             let res : CertifiedAssets.HttpResponse = {
                 status_code = 200;
-                headers = [("Content-Type", "text/plain")];
+                headers = [("content-type", "text/plain")];
                 body = "👋 Hello, World!";
                 streaming_strategy = null;
                 upgrade = null;
@@ -206,47 +217,54 @@ actor {
             let #ok(certificate_headers) = certs.get_certificate(req, res, null) else return assert false;
 
             let (ic_certificate, ic_certificate_expression) = if (certificate_headers[0].0 == "ic-certificate") {
-                (certificate_headers[0].1, certificate_headers[1].1)
-            } else {
-                (certificate_headers[1].1, certificate_headers[0].1)
-            };
+                (certificate_headers[0].1, certificate_headers[1].1);
+            } else { (certificate_headers[1].1, certificate_headers[0].1) };
 
-
-            let {certificate; tree; version; expr_path} = split_certificate(ic_certificate);
+            let { certificate; tree; version; expr_path } = split_certificate(ic_certificate);
 
             ts_assert_or_print(
-                certificate == ":" # to_base64(Option.get(CertifiedData.getCertificate(), "": Blob)) # ":",
-                "certificate does not match expected value"
+                certificate == ":" # to_base64(Option.get(CertifiedData.getCertificate(), "" : Blob)) # ":",
+                "certificate does not match expected value",
             );
 
             ts_assert_or_print(
                 version == "2",
-                "version does not match expected value"
+                "version does not match expected value",
             );
 
             ts_assert_or_print(
                 expr_path == encode_expr_path(["http_expr", "hello", "<$>"]),
-                "expr_path does not match expected value"
+                "expr_path does not match expected value",
             );
-           
+
             ts_assert_or_print(
-                ic_certificate_expression == "default_certification ( ValidationArgs { certification: Certification { no_request_certification: Empty { }, response_certification: ResponseCertification { certified_response_headers: ResponseHeaderList { headers: [\"Content-Type\"] } } } } )",
-                "ic_certificate_expression does not match expected value"
+                ic_certificate_expression == "default_certification ( ValidationArgs { certification: Certification { no_request_certification: Empty { }, response_certification: ResponseCertification { certified_response_headers: ResponseHeaderList { headers: [\"content-type\"] } } } } )",
+                "ic_certificate_expression does not match expected value",
             );
+
+            let no_certification = false;
+            let no_request_certification = true;
 
             let ic_certificate_expression_hash = SHA256.fromBlob(#sha256, Text.encodeUtf8(ic_certificate_expression));
             let request_hash : Blob = ""; // no_request_certification
-            let response_hash = get_respoonse_hash(200, [("Content-Type", "text/plain")], SHA256.fromBlob(#sha256, "👋 Hello, World!"), ic_certificate_expression);
-            let blob_http_expr_path = Array.map(["http_expr", "hello", "<$>"], func(t : Text) : Blob { Text.encodeUtf8(t) });
+            let response_hash = CertifiedAssets.get_response_hash(
+                no_certification,
+                200,
+                SHA256.fromBlob(#sha256, "👋 Hello, World!"),
+                [("content-type", "text/plain")],
+                ic_certificate_expression,
+            );
+
+            let blob_http_expr_path = Array.map(["http_expr", "hello", "<$>"], Text.encodeUtf8);
             let full_expr_path = Array.append(blob_http_expr_path, [ic_certificate_expression_hash, request_hash, response_hash]);
             let tree_witness = get_witness(full_expr_path);
 
             ts_assert_or_print(
                 tree == tree_witness,
-                "tree does not match expected value "
+                "tree does not match expected value ",
             );
 
-        }
+        },
     );
 
     suite.add(
@@ -268,7 +286,7 @@ actor {
                 Itertools.any(
                     certs.endpoints(),
                     func(endpoint_record : CertifiedAssets.EndpointRecord) : Bool {
-                        endpoint_record.url == "/hello_world.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("Content-Type", "text/plain")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Hello, World!") and endpoint_record.no_request_certification
+                        endpoint_record.url == "/hello_world.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("content-type", "text/plain")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Hello, World!") and endpoint_record.no_request_certification
                     },
                 )
             );
@@ -288,14 +306,14 @@ actor {
 
             let res : CertifiedAssets.HttpResponse = {
                 status_code = 200;
-                headers = [("Content-Type", "text/plain")];
+                headers = [("content-type", "text/plain")];
                 body = "Hello, World!";
                 streaming_strategy = null;
                 upgrade = null;
             };
 
             let response_with_additional_headers = {
-                res with headers = [("Content-Type", "text/plain"), ("X-Test", "Test")];
+                res with headers = [("content-type", "text/plain"), ("x-test", "Test")];
             };
 
             let should_succeed = [
@@ -321,7 +339,7 @@ actor {
             };
 
             let response_with_incorrect_content_type = {
-                res with headers = [("Content-Type", "text/html")];
+                res with headers = [("content-type", "text/html")];
             };
 
             let should_fail = [
@@ -352,7 +370,7 @@ actor {
                     "Content-Type",
                     "gzip",
                 ).response_header(
-                    "X-Test",
+                    "x-test",
                     "Test",
                 ).no_request_certification()
             );
@@ -361,7 +379,7 @@ actor {
                 Itertools.any(
                     certs.endpoints(),
                     func(endpoint_record : CertifiedAssets.EndpointRecord) : Bool {
-                        endpoint_record.url == "/hello_world.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("Content-Type", "gzip"), ("X-Test", "Test")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Hello, World!") and endpoint_record.no_request_certification
+                        endpoint_record.url == "/hello_world.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("content-type", "gzip"), ("x-test", "Test")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Hello, World!") and endpoint_record.no_request_certification
                     },
                 )
             );
@@ -376,7 +394,7 @@ actor {
                     "Content-Type",
                     "text/plain",
                 ).response_header(
-                    "X-Test",
+                    "x-test",
                     "Test",
                 ).no_request_certification()
             );
@@ -385,7 +403,7 @@ actor {
                 Itertools.any(
                     certs.endpoints(),
                     func(endpoint_record : CertifiedAssets.EndpointRecord) : Bool {
-                        endpoint_record.url == "/hello_world.txt" and endpoint_record.status == 304 and endpoint_record.response_headers == [("Content-Type", "text/plain"), ("X-Test", "Test")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Hello, World!") and endpoint_record.no_request_certification
+                        endpoint_record.url == "/hello_world.txt" and endpoint_record.status == 304 and endpoint_record.response_headers == [("content-type", "text/plain"), ("x-test", "Test")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Hello, World!") and endpoint_record.no_request_certification
                     },
                 )
             );
@@ -406,7 +424,7 @@ actor {
 
             let res_200 : CertifiedAssets.HttpResponse = {
                 status_code = 200;
-                headers = [("Content-Type", "gzip"), ("X-Test", "Test")];
+                headers = [("content-type", "gzip"), ("x-test", "Test")];
                 body = "Hello, World!";
                 streaming_strategy = null;
                 upgrade = null;
@@ -414,7 +432,7 @@ actor {
 
             let res_304 : CertifiedAssets.HttpResponse = {
                 status_code = 304;
-                headers = [("Content-Type", "text/plain"), ("X-Test", "Test")];
+                headers = [("content-type", "text/plain"), ("x-test", "Test")];
                 body = "Hello, World!";
                 streaming_strategy = null;
                 upgrade = null;
@@ -438,7 +456,7 @@ actor {
                     res_200 with body : Blob = "Goodbye, World!";
                 },
                 {
-                    res_200 with headers = [("Content-Type", "text/html")];
+                    res_200 with headers = [("content-type", "text/html")];
                 },
                 {
                     res_304 with status_code : Nat16 = 404;
@@ -447,7 +465,7 @@ actor {
                     res_304 with body : Blob = "Goodbye, World!";
                 },
                 {
-                    res_304 with headers = [("Content-Type", "text/html")];
+                    res_304 with headers = [("content-type", "text/html")];
                 },
             ];
 
@@ -477,7 +495,7 @@ actor {
                 Itertools.any(
                     certs.endpoints(),
                     func(endpoint_record : CertifiedAssets.EndpointRecord) : Bool {
-                        endpoint_record.url == "/assets/delete-me.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("Content-Type", "text/plain")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Delete me!") and endpoint_record.no_request_certification
+                        endpoint_record.url == "/assets/delete-me.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("content-type", "text/plain")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Delete me!") and endpoint_record.no_request_certification
                     },
                 )
             );
@@ -503,7 +521,7 @@ actor {
                 not Itertools.all(
                     certs.endpoints(),
                     func(endpoint_record : CertifiedAssets.EndpointRecord) : Bool {
-                        endpoint_record.url == "/assets/delete-me.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("Content-Type", "text/plain")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Delete me!") and endpoint_record.no_request_certification
+                        endpoint_record.url == "/assets/delete-me.txt" and endpoint_record.status == 200 and endpoint_record.response_headers == [("content-type", "text/plain")] and endpoint_record.hash == SHA256.fromBlob(#sha256, "Delete me!") and endpoint_record.no_request_certification
                     },
                 )
             );
@@ -513,25 +531,24 @@ actor {
     suite.add(
         "certify fallback path",
         func({ ts_assert; ts_print; ts_assert_or_print } : CanisterTests.TestTools) : async () {
-           certs.certify(
+            certs.certify(
                 CertifiedAssets.Endpoint(
-                    "/fallback/index.html",
+                    "/fallback/",
                     ?Text.encodeUtf8("Fallback!"),
                 ).status(
                     200
                 ).response_header(
                     "Content-Type",
                     "text/plain",
-                ).no_request_certification()
+                ).no_request_certification().is_fallback_path(true)
             );
-
         },
     );
 
     suite.add_query(
-        "get fallback", 
-        func({ ts_assert; ts_print; ts_assert_or_print } : CanisterTests.TestTools): () {
-              let req : CertifiedAssets.HttpRequest = {
+        "get fallback",
+        func({ ts_assert; ts_print; ts_assert_or_print } : CanisterTests.TestTools) : () {
+            let req : CertifiedAssets.HttpRequest = {
                 method = "GET";
                 url = "/fallback/missing_file.txt";
                 headers = [];
@@ -541,58 +558,55 @@ actor {
 
             let fallback_res : CertifiedAssets.HttpResponse = {
                 status_code = 200;
-                headers = [("Content-Type", "text/plain")];
+                headers = [("content-type", "text/plain")];
                 body = "Fallback!";
                 streaming_strategy = null;
                 upgrade = null;
             };
 
-            let certificates  = switch (certs.get_fallback_certificate(req, "/fallback/index.html", fallback_res, null)) {
+            let certificates = switch (certs.get_fallback_certificate(req, "/fallback/", fallback_res, null)) {
                 case (#ok(certificates)) certificates;
                 case (#err(msg)) return ts_assert_or_print(false, "Failed to retrieve fallback certificate: " # msg);
             };
 
             let (ic_certificate, ic_certificate_expression) = if (certificates[0].0 == "ic-certificate") {
-                (certificates[0].1, certificates[1].1)
-            } else {
-                (certificates[1].1, certificates[0].1)
-            };
+                (certificates[0].1, certificates[1].1);
+            } else { (certificates[1].1, certificates[0].1) };
 
-            let {certificate; tree; version; expr_path} = split_certificate(ic_certificate);
+            let { certificate; tree; version; expr_path } = split_certificate(ic_certificate);
 
             ts_assert_or_print(
-                certificate == ":" # to_base64(Option.get(CertifiedData.getCertificate(), "": Blob)) # ":",
-                "certificate does not match expected value"
+                certificate == ":" # to_base64(Option.get(CertifiedData.getCertificate(), "" : Blob)) # ":",
+                "certificate does not match expected value",
             );
 
             ts_assert_or_print(
                 version == "2",
-                "version does not match expected value"
+                "version does not match expected value",
             );
 
             ts_assert_or_print(
-                expr_path == encode_expr_path(["http_expr", "fallback", "<*>"]),
-                "expr_path does not match expected value " 
+                expr_path == encode_expr_path(["http_expr", "fallback", "", "<*>"]),
+                "expr_path does not match expected value ",
             );
 
             ts_assert_or_print(
-                ic_certificate_expression == "default_certification ( ValidationArgs { certification: Certification { no_request_certification: Empty { }, response_certification: ResponseCertification { certified_response_headers: ResponseHeaderList { headers: [\"Content-Type\"] } } } } )",
-                "ic_certificate_expression does not match expected value"
+                ic_certificate_expression == "default_certification ( ValidationArgs { certification: Certification { no_request_certification: Empty { }, response_certification: ResponseCertification { certified_response_headers: ResponseHeaderList { headers: [\"content-type\"] } } } } )",
+                "ic_certificate_expression does not match expected value",
             );
 
             let ic_certificate_expression_hash = SHA256.fromBlob(#sha256, Text.encodeUtf8(ic_certificate_expression));
             let request_hash : Blob = ""; // no_request_certification
-            let response_hash = get_respoonse_hash(200, [("Content-Type", "text/plain")], SHA256.fromBlob(#sha256, "Fallback!"), ic_certificate_expression);
-            let blob_http_expr_path = Array.map(["http_expr", "fallback", "<*>"], func(t : Text) : Blob { Text.encodeUtf8(t) });
+            let response_hash = get_respoonse_hash(200, [("content-type", "text/plain")], SHA256.fromBlob(#sha256, "Fallback!"), ic_certificate_expression);
+            let blob_http_expr_path = Array.map(["http_expr", "fallback", "", "<*>"], func(t : Text) : Blob { Text.encodeUtf8(t) });
             let full_expr_path = Array.append(blob_http_expr_path, [ic_certificate_expression_hash, request_hash, response_hash]);
             let tree_witness = get_witness(full_expr_path);
 
             ts_assert_or_print(
                 tree == tree_witness,
-                "tree does not match expected value "
+                "tree does not match expected value ",
             );
-        }
+        },
     );
 
-    
 };
