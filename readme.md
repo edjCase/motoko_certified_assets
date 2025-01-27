@@ -142,6 +142,8 @@ Once again, you can include the hash of the data when retrieving the certified r
 
 ### Fallback index.html files
 
+<!-- A fallback is any prefix in the path of the requested file that can be used to serve a default index.html file. -->
+
 Asset certification V2 allows you to fallback to a default index.html file if the requested file. Fallbacks only work if the index.html directory path is a prefix of the requested file path. For example, if the requested file is `/path/to/file.txt`, the fallback index.html file could be stored at either `/path/to/index.html`, `/path/index.html` or `/index.html`.
 
 - Certify a fallback index.html file
@@ -192,7 +194,18 @@ Asset certification V2 allows you to fallback to a default index.html file if th
 
 ```
 
-## Unit Testing
+## Testing
+
+### Unit tests
+
+- Install [mops](https://docs.mops.one/quick-start)
+- Run the following command in your project directory:
+
+```bash
+mops test
+```
+
+### Replica Tests
 
 - Install zx with `npm install -g zx`
 - Install dfinity's [`idl2json` package](https://github.com/dfinity/idl2json?tab=readme-ov-file#with-cargo-install)

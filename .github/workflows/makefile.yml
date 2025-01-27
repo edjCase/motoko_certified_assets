@@ -22,7 +22,7 @@ jobs:
       - name: Cache Node modules
         uses: actions/cache@v2
         with:
-          path: $GITHUB_WORKSPACE/.npm
+          path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
@@ -32,8 +32,8 @@ jobs:
         with:
           key: mops-packages-${{ hashFiles('mops.toml') }}
           path: |
-            $GITHUB_WORKSPACE/.cache/mops
-            $GITHUB_WORKSPACE/mops
+            ~/.cache/mops
+            ~/mops
 
       - name: Install dfx
         uses: dfinity/setup-dfx@main
@@ -68,4 +68,6 @@ jobs:
           cargo install idl2json_cli
 
       - name: Run Tests
-        run: make canister-tests
+        run: |
+          mops test 
+          make canister-tests

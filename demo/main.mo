@@ -88,9 +88,9 @@ actor {
                     },
                 ),
                 switch (pagination) {
-                    case (? #small) 3;
-                    case (? #medium) 5;
-                    case (? #large) 10;
+                    case (?#small) 3;
+                    case (?#medium) 5;
+                    case (?#large) 10;
                     case (_) Map.size(teams);
                 },
             ),
@@ -110,14 +110,19 @@ actor {
 
     func certify_homepage() {
         let _homepage = homepage();
-        let homepage_endpoint = CertifiedAssets.Endpoint("/", ?Text.encodeUtf8(_homepage)).no_request_certification().response_header(
+
+        let homepage_endpoint = CertifiedAssets.Endpoint("/index.html", ?Text.encodeUtf8(_homepage)).no_request_certification().response_header(
             "Content-Type",
             "text/html",
         ).response_header(
             "Content-Length",
             debug_show _homepage.size(),
-        ).status(200).is_fallback_path();
+        ).status(200);
+
         certs.certify(homepage_endpoint);
+
+        let homepage_alias = homepage_endpoint.url("/");
+        certs.certify(homepage_alias);
 
         let homepage_endpoint2 = CertifiedAssets.Endpoint("/home", ?Text.encodeUtf8(_homepage)).response_header(
             "Content-Type",
@@ -155,7 +160,7 @@ actor {
         ).status(200);
         certs.certify(teams_endpoint);
 
-        let small_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #small))).query_param(
+        let small_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(?#small))).query_param(
             "size",
             "small",
         ).response_header(
@@ -167,7 +172,7 @@ actor {
         ).status(200);
         certs.certify(small_teams_endpoint);
 
-        let medium_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #medium))).query_param(
+        let medium_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(?#medium))).query_param(
             "size",
             "medium",
         ).response_header(
@@ -176,7 +181,7 @@ actor {
         ).status(200);
         certs.certify(medium_teams_endpoint);
 
-        let large_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(? #large))).query_param(
+        let large_teams_endpoint = CertifiedAssets.Endpoint("/v1/teams", ?Text.encodeUtf8(teams_json(?#large))).query_param(
             "size",
             "large",
         ).response_header("Content-Type", "application/json").status(200);
@@ -306,7 +311,7 @@ actor {
                     upgrade = null;
                 };
             };
-            case ("" or "/" or "/home" or "/home/" or "/h o m e" or "/home/index.html", _) {
+            case ("/" or "/index.html", _) {
 
                 let _homepage = homepage();
 
@@ -351,13 +356,13 @@ actor {
             };
             case (_) {
                 // path -> '/v1/teams/:team'
-                var response :  HttpTypes.Response  = {
+                var response : HttpTypes.Response = {
                     status_code = 404;
                     body = Text.encodeUtf8("Not Found");
                     headers = [];
                     streaming_strategy = null;
                     upgrade = null;
-                }; 
+                };
 
                 if (Text.startsWith(url.path.original, #text "/v1/teams/")) {
                     let team = url.path.array[2];
@@ -373,7 +378,7 @@ actor {
                 };
 
                 response;
-                
+
             };
         };
 

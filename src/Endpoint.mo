@@ -52,8 +52,29 @@ module {
         var _is_fallback_path = false;
 
         let sha256 = SHA256.Digest(#sha256);
-        let _url = HttpParser.URL(url_text, HttpParser.Headers([])); // clashing feature: removes ending slash if present
         let _queries = Buffer.Buffer<HttpTypes.Header>(8);
+
+        var _url = HttpParser.URL(url_text, HttpParser.Headers([]));
+
+        for (entry in _url.queryObj.trieMap.entries()) {
+            _queries.add(entry);
+        };
+
+        public func url(url_text : Text) : Endpoint {
+            for (entry in _url.queryObj.trieMap.entries()) {
+                switch (Buffer.indexOf(entry, _queries, func(a : HttpTypes.Header, b : HttpTypes.Header) : Bool { a == b })) {
+                    case (?index) ignore _queries.remove(index);
+                    case (null) {};
+                };
+            };
+
+            _url := HttpParser.URL(url_text, HttpParser.Headers([]));
+            for (entry in _url.queryObj.trieMap.entries()) {
+                _queries.add(entry);
+            };
+
+            return self;
+        };
 
         /// Hashes the given blob and sets it as the hash for the endpoint.
         public func body(blob : Blob) : Endpoint {
@@ -89,14 +110,14 @@ module {
 
         /// Adds a request header to the endpoint.
         public func request_header(field : Text, value : Text) : Endpoint {
-            _request_headers.add((field, value));
+            _request_headers.add((Text.toLowercase(field), value));
             return self;
         };
 
         /// Adds multiple request headers to the endpoint.
         public func request_headers(params : [(Text, Text)]) : Endpoint {
             for ((field, value) in params.vals()) {
-                _request_headers.add((field, value));
+                _request_headers.add((Text.toLowercase(field), value));
             };
             return self;
         };
@@ -123,14 +144,14 @@ module {
 
         /// Adds a response header to the endpoint.
         public func response_header(field : Text, value : Text) : Endpoint {
-            _response_headers.add((field, value));
+            _response_headers.add((Text.toLowercase(field), value));
             return self;
         };
 
         /// Adds multiple response headers to the endpoint.
         public func response_headers(params : [(Text, Text)]) : Endpoint {
             for ((field, value) in params.vals()) {
-                _response_headers.add((field, value));
+                _response_headers.add((Text.toLowercase(field), value));
             };
 
             return self;
@@ -154,18 +175,12 @@ module {
             return self;
         };
 
-        let url = HttpParser.URL(url_text, HttpParser.Headers([]));
-
-        for (entry in url.queryObj.trieMap.entries()) {
-            _queries.add(entry);
-        };
-
         /// Constructs an `EndpointRecord` from the current state of the `Endpoint`.
         /// > The endpoint can still be modified after calling this function and used to create more records.
         public func build() : EndpointRecord {
 
             let record : EndpointRecord = {
-                url = url.path.original;
+                url = if (_url.original == "") "" else _url.path.original;
                 hash = _hash;
                 method = _method;
                 query_params = if (_no_request_certification)[] else Buffer.toArray(_queries);
