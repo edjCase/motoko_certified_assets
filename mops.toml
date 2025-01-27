@@ -2,7 +2,7 @@
 name = "certified-assets"
 description = "A library for certifying assets served via HTTP, ensuring the security of query calls on the IC."
 repository = "https://github.com/NatLabs/certified-assets"
-version = "0.5.0"
+version = "0.5.1"
 license = "MIT"
 keywords = ["assets", "http", "certification"]
 
